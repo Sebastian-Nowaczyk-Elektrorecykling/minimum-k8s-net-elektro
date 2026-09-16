@@ -1,0 +1,27 @@
+{
+  "cluster_name": "elektro",
+  "git_url": "https://github.com/Sebastian-Nowaczyk-Elektrorecykling/minimum-k8s-net-elektro.git",
+  "git_branch": "main",
+  "lan_cidr": "192.168.0.0/20",
+  "api_ip": "192.168.2.153",
+  "pod_cidr": "10.42.0.0/16",
+  "service_cidr": "10.43.0.0/16",
+  "cluster_dns_ip": "10.43.0.10",
+  "lan_dns_service_ip": "10.43.0.54",
+  "domain": "internal",
+  "upstream_dns": [
+    "1.1.1.1",
+    "9.9.9.9"
+  ],
+  "cilium_devices": [],
+  "operator_replicas": 1,
+  "k3s_version": "v1.36.4+k3s1",
+  "cilium_version": "1.20.2",
+  "gateway_api_version": "v1.6.1",
+  "flux_version": "v2.9.5",
+  "helm_version": "v3.19.0",
+  "cert_manager_version": "v1.21.2",
+  "coredns_image": "coredns/coredns:1.14.7",
+  "nginx_image": "nginx:1.30.5-alpine",
+  "nvidia_toolkit_version": "1.20.0-1"
+}

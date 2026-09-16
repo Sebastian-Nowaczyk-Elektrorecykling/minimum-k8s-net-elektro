@@ -1,0 +1,39 @@
+name: Validate cluster configuration
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - uses: azure/setup-helm@v4
+        with: {version: v3.19.0}
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          python -m pip install -r tests/requirements.txt
+          mkdir -p .cache/tools
+          curl -fsSL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.7.1/kustomize_v5.7.1_linux_amd64.tar.gz -o .cache/tools/kustomize.tar.gz
+          tar -xzf .cache/tools/kustomize.tar.gz -C .cache/tools
+          echo "$PWD/.cache/tools" >> "$GITHUB_PATH"
+          dns_version=$(python -c 'import json; print(json.load(open("config/cluster.json"))["coredns_image"].rsplit(":", 1)[1])')
+          dns_archive="coredns_${dns_version}_linux_amd64.tgz"
+          curl -fsSL "https://github.com/coredns/coredns/releases/download/v${dns_version}/${dns_archive}" -o ".cache/tools/${dns_archive}"
+          curl -fsSL "https://github.com/coredns/coredns/releases/download/v${dns_version}/${dns_archive}.sha256" -o .cache/tools/coredns.sha256
+          (cd .cache/tools && sha256sum -c coredns.sha256)
+          tar -xzf ".cache/tools/${dns_archive}" -C .cache/tools
+          echo "COREDNS=$PWD/.cache/tools/coredns" >> "$GITHUB_ENV"
+      - name: Check scripts and role/network validation
+        run: |
+          shellcheck -x -P SCRIPTDIR scripts/*.sh scripts/lib/*.sh
+          for script in scripts/*.sh scripts/lib/*.sh; do bash -n "$script"; done
+          python -m unittest discover -s tests -v
+      - name: Build Flux targets and pinned Helm charts
+        run: python scripts/validate.py

@@ -1,0 +1,139 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lan-dns
+  namespace: lan-system
+data:
+  Corefile: |
+    ${DOMAIN}:1053 {
+      errors
+      file /etc/coredns/internal.zone ${DOMAIN} {
+        reload 30s
+      }
+      cache 30
+      reload
+    }
+    .:1053 {
+      errors
+      health :8080
+      ready :8181
+      prometheus :9153
+      forward . ${UPSTREAM_DNS}
+      cache 30
+      loop
+      reload
+    }
+  internal.zone: |
+    $ORIGIN ${DOMAIN}.
+    @ 30 IN SOA ns.${DOMAIN}. hostmaster.${DOMAIN}. ( 2026091601 60 30 604800 30 )
+    @ 30 IN NS ns.${DOMAIN}.
+    @ 30 IN A ${API_IP}
+    ns 30 IN A ${API_IP}
+    api 30 IN A ${API_IP}
+    admin 30 IN A ${API_IP}
+    *.admin 30 IN A ${API_IP}
+    * 30 IN A ${API_IP}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lan-dns
+  namespace: lan-system
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: lan-dns}
+  template:
+    metadata:
+      labels: {app: lan-dns}
+      annotations: {elektro.internal/config-revision: '${CONFIG_REVISION}'}
+    spec:
+      automountServiceAccountToken: false
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      nodeSelector: {elektro.internal/edge: "true"}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: coredns
+          image: ${COREDNS_IMAGE}
+          args: [-conf, /etc/coredns/Corefile]
+          ports:
+            - {name: dns-udp, containerPort: 1053, hostPort: 53, hostIP: "${API_IP}", protocol: UDP}
+            - {name: dns-tcp, containerPort: 1053, hostPort: 53, hostIP: "${API_IP}", protocol: TCP}
+            - {name: metrics, containerPort: 9153}
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          readinessProbe: {httpGet: {path: /ready, port: 8181}}
+          livenessProbe: {httpGet: {path: /health, port: 8080}}
+          volumeMounts:
+            - {name: config, mountPath: /etc/coredns, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: lan-dns}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lan-dns
+  namespace: lan-system
+spec:
+  type: ClusterIP
+  clusterIP: ${LAN_DNS_SERVICE_IP}
+  selector: {app: lan-dns}
+  ports:
+    - {name: dns-udp, port: 53, targetPort: dns-udp, protocol: UDP}
+    - {name: dns-tcp, port: 53, targetPort: dns-tcp, protocol: TCP}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lan-dns-metrics
+  namespace: lan-system
+  labels: {app: lan-dns}
+spec:
+  selector: {app: lan-dns}
+  ports:
+    - {name: metrics, port: 9153, targetPort: metrics}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: dns-from-lan-and-cluster
+  namespace: lan-system
+spec:
+  endpointSelector:
+    matchLabels: {app: lan-dns}
+  ingress:
+    - fromCIDR: ["${LAN_CIDR}"]
+      toPorts:
+        - ports: [{port: "1053", protocol: UDP}, {port: "1053", protocol: TCP}]
+    - fromEntities: [cluster]
+      toPorts:
+        - ports: [{port: "1053", protocol: UDP}, {port: "1053", protocol: TCP}, {port: "9153", protocol: TCP}]
+---
+# k3s imports this ConfigMap automatically. Its built-in CoreDNS retains sole
+# ownership of cluster.local; only the private LAN suffix is forwarded.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  internal.server: |
+    ${DOMAIN}:53 {
+      errors
+      cache 30
+      forward . ${LAN_DNS_SERVICE_IP}
+    }

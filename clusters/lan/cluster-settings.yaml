@@ -1,0 +1,33 @@
+{
+  "apiVersion": "v1",
+  "kind": "ConfigMap",
+  "metadata": {
+    "name": "cluster-settings",
+    "namespace": "flux-system"
+  },
+  "data": {
+    "CLUSTER_NAME": "elektro",
+    "GIT_URL": "https://github.com/Sebastian-Nowaczyk-Elektrorecykling/minimum-k8s-net-elektro.git",
+    "GIT_BRANCH": "main",
+    "LAN_CIDR": "192.168.0.0/20",
+    "API_IP": "192.168.2.153",
+    "POD_CIDR": "10.42.0.0/16",
+    "SERVICE_CIDR": "10.43.0.0/16",
+    "CLUSTER_DNS_IP": "10.43.0.10",
+    "LAN_DNS_SERVICE_IP": "10.43.0.54",
+    "DOMAIN": "internal",
+    "OPERATOR_REPLICAS": "1",
+    "K3S_VERSION": "v1.36.4+k3s1",
+    "CILIUM_VERSION": "1.20.2",
+    "GATEWAY_API_VERSION": "v1.6.1",
+    "FLUX_VERSION": "v2.9.5",
+    "HELM_VERSION": "v3.19.0",
+    "CERT_MANAGER_VERSION": "v1.21.2",
+    "COREDNS_IMAGE": "coredns/coredns:1.14.7",
+    "NGINX_IMAGE": "nginx:1.30.5-alpine",
+    "NVIDIA_TOOLKIT_VERSION": "1.20.0-1",
+    "UPSTREAM_DNS": "1.1.1.1 9.9.9.9",
+    "ADMIN_DOMAIN": "admin.internal",
+    "CONFIG_REVISION": "3b7f714650a6603c"
+  }
+}
