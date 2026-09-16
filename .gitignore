@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.cache/
+.venv/
+*.key
+*.pem
+*.kubeconfig
+*.token
+secrets/
+config/node.env
