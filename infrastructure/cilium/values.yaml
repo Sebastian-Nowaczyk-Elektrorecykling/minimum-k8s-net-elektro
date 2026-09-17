@@ -17,6 +17,11 @@
   "l2announcements": {
     "enabled": false
   },
+  "ingressController": {
+    "enabled": false,
+    "default": false
+  },
+  "l7Proxy": true,
   "gatewayAPI": {
     "enabled": true,
     "gatewayClass": {
@@ -100,7 +105,10 @@
         {
           "operator": "Exists"
         }
-      ]
+      ],
+      "ingress": {
+        "enabled": false
+      }
     },
     "metrics": {
       "enabled": [

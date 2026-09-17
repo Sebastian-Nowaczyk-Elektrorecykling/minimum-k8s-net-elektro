@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Build all reconciliation targets, substitute settings, and verify invariants.
 
-Requires PyYAML, kustomize, helm. Optional KUBECONFORM enables upstream schema
-validation; missing custom schemas are checked separately against pinned CRDs.
+Requires the test requirements, kustomize, helm and kubeconform. Built-in APIs
+are validated against the pinned Kubernetes version, custom APIs against CRDs.
 No cluster, root access, or host changes are needed.
 """
+import json
 import os
 from pathlib import Path
 import re
@@ -20,6 +21,31 @@ yaml.SafeLoader.add_constructor("tag:yaml.org,2002:value", lambda loader, node: 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import config  # noqa: E402
+
+BUILTIN_GROUPS = {
+    "", "admissionregistration.k8s.io", "apiextensions.k8s.io", "apiregistration.k8s.io",
+    "apps", "authentication.k8s.io", "authorization.k8s.io", "autoscaling", "batch",
+    "certificates.k8s.io", "coordination.k8s.io", "discovery.k8s.io",
+    "flowcontrol.apiserver.k8s.io", "networking.k8s.io", "node.k8s.io", "policy",
+    "rbac.authorization.k8s.io", "resource.k8s.io", "scheduling.k8s.io", "storage.k8s.io",
+}
+
+
+def validate_gateway_only(docs):
+    """Reject legacy routing in authored resources and rendered Helm output."""
+    for doc in docs:
+        if doc["kind"] in ("Ingress", "IngressClass"):
+            raise ValueError(f"Use Gateway API instead of {doc['kind']}: {doc['metadata']['name']}")
+        if doc["apiVersion"].startswith("gateway.networking.k8s.io/") and doc["apiVersion"] != "gateway.networking.k8s.io/v1":
+            raise ValueError(f"Use the stable Gateway API v1: {doc['kind']}/{doc['metadata']['name']}")
+        annotations = doc.get("metadata", {}).get("annotations") or {}
+        if any(key == "kubernetes.io/ingress.class" or key.startswith((
+                "nginx.ingress.kubernetes.io/", "ingress.cilium.io/",
+                "traefik.ingress.kubernetes.io/")) for key in annotations):
+            raise ValueError(f"Legacy Ingress annotation on {doc['kind']}/{doc['metadata']['name']}")
+        for solver in doc.get("spec", {}).get("acme", {}).get("solvers", []):
+            if "ingress" in solver.get("http01", {}):
+                raise ValueError("ACME HTTP-01 must use Gateway HTTPRoute, not an Ingress solver")
 
 
 def run(*args):
@@ -88,6 +114,15 @@ def main():
                 assert "${" not in yaml.safe_dump(d), f"Unsubstituted variable in {identity}"
         all_docs.extend(docs)
         print(f"Built {name}: {len(docs)} objects")
+    # Examples are deployable inputs too; catch regressions before they are copied.
+    example_text = substitute((ROOT / "examples/whoami.yaml").read_text(), settings)
+    (cache / "example-whoami.yaml").write_text(example_text)
+    example_docs = list(yaml.safe_load_all(example_text))
+    validate_gateway_only(all_docs + example_docs)
+    root = list(yaml.safe_load_all((cache / "root.yaml").read_text()))
+    for name in ("network", "gateway", "admin", "apps"):
+        step = next(d for d in root if d["kind"] == "Kustomization" and d["metadata"]["name"] == name)
+        assert {h["kind"] for h in step["spec"]["healthCheckExprs"]} == {"GatewayClass", "Gateway", "HTTPRoute"}
     for d in all_docs:
         if d["kind"] == "Secret":
             raise ValueError("Secrets must not be committed")
@@ -142,11 +177,23 @@ def main():
         else:
             args += [chart, "--repo", repository, "--version", version]
         output = run(*args)
+        validate_gateway_only([d for d in yaml.safe_load_all(output) if d])
         (cache / f"chart-{name}.yaml").write_text(output)
         print(f"Rendered {chart} {version}")
     # Future monitoring examples are never reconciled, but their selectors and
     # ports must match the Cilium endpoints we actually enable.
     cilium_docs = list(yaml.safe_load_all((cache / "chart-cilium.yaml").read_text()))
+    cilium_config = next(d["data"] for d in cilium_docs if d and d["kind"] == "ConfigMap" and d["metadata"]["name"] == "cilium-config")
+    assert cilium_config.get("enable-ingress-controller", "false") == "false"
+    assert cilium_config["enable-gateway-api"] == "true"
+    assert cilium_config["gateway-api-hostnetwork-enabled"] == "true"
+    assert cilium_config["gateway-api-hostnetwork-nodelabelselector"] == "elektro.internal/edge=true"
+    operator_role = next(d for d in cilium_docs if d and d["kind"] == "ClusterRole" and d["metadata"]["name"] == "cilium-operator")
+    assert not any(r.startswith("ingresses") or r == "ingressclasses"
+                   for rule in operator_role["rules"] for r in rule.get("resources", []))
+    certificate_docs = [d for d in yaml.safe_load_all((cache / "chart-cert-manager.yaml").read_text()) if d]
+    controller = next(d for d in certificate_docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "cert-manager")
+    assert "--controllers=*,-ingress-shim" in controller["spec"]["template"]["spec"]["containers"][0]["args"]
     for d in cilium_docs:
         if not d or d["kind"] not in ("Deployment", "DaemonSet", "Job", "CronJob"):
             continue
@@ -193,17 +240,43 @@ def main():
     for d in schema_docs:
         if d.get("kind") == "CustomResourceDefinition":
             for v in d["spec"]["versions"]:
+                if not v["served"] or v.get("deprecated", False):
+                    continue
                 schema_by_gvk[(d["spec"]["group"] + "/" + v["name"], d["spec"]["names"]["kind"])] = v["schema"]["openAPIV3Schema"]
+    # The kubeconform catalog omits the CRD definition schema for some releases.
+    # Validate definitions against Kubernetes' own versioned OpenAPI instead of
+    # globally ignoring missing schemas (which would hide real mistakes).
+    kubernetes_tag = c["k3s_version"].split("+")[0]
+    crd_url = (f"https://raw.githubusercontent.com/kubernetes/kubernetes/{kubernetes_tag}/"
+               "api/openapi-spec/v3/apis__apiextensions.k8s.io__v1_openapi.json")
+    with urllib.request.urlopen(crd_url, timeout=60) as response:
+        crd_openapi = json.load(response)
+    crd_validator = jsonschema.Draft7Validator({
+        "$ref": "#/components/schemas/io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.CustomResourceDefinition",
+        "components": crd_openapi["components"]})
     count = 0
-    for d in all_docs + sso_docs:
+    crd_count = 0
+    builtins = []
+    for d in all_docs + sso_docs + example_docs + [d for d in cilium_docs if d] + certificate_docs:
+        if d["apiVersion"] == "apiextensions.k8s.io/v1" and d["kind"] == "CustomResourceDefinition":
+            crd_validator.validate(d)
+            crd_count += 1
+            continue
         schema = schema_by_gvk.get((d["apiVersion"], d["kind"]))
         if schema:
             jsonschema.Draft7Validator(schema).validate(d)
             count += 1
+        elif d["apiVersion"].partition("/")[0] in BUILTIN_GROUPS or d["apiVersion"] == "v1":
+            builtins.append(d)
+        else:
+            raise ValueError(f"No served, non-deprecated CRD schema for {d['apiVersion']} {d['kind']}")
     print(f"Validated {count} custom resources against pinned CRD schemas")
-    if os.environ.get("KUBECONFORM"):
-        files = [str(p) for p in cache.glob("*.yaml") if not p.name.endswith("-values.yaml")]
-        subprocess.run([os.environ["KUBECONFORM"], "-summary", "-strict", "-ignore-missing-schemas", *files], check=True)
+    print(f"Validated {crd_count} CRD definitions against Kubernetes {kubernetes_tag} OpenAPI")
+    builtin_file = cache / "builtin-resources.yaml"
+    builtin_file.write_text(yaml.safe_dump_all(builtins))
+    subprocess.run([os.environ.get("KUBECONFORM", "kubeconform"), "-summary", "-strict",
+                    "-kubernetes-version", c["k3s_version"].split("+")[0][1:],
+                    str(builtin_file)], check=True)
     print("Validation passed; host provisioning and LAN reachability still require a real Debian cluster.")
 
 

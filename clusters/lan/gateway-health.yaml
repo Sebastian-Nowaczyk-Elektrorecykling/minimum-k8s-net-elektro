@@ -1,0 +1,37 @@
+# Gateway API does not use Kubernetes' usual Ready condition. Require current
+# positive conditions; an empty condition list must never count as healthy.
+- op: add
+  path: /spec/healthCheckExprs
+  value:
+    - apiVersion: gateway.networking.k8s.io/v1
+      kind: GatewayClass
+      current: >-
+        has(status.conditions) &&
+        status.conditions.exists(c, c.type == 'Accepted' && c.status == 'True' &&
+          c.observedGeneration == metadata.generation)
+    - apiVersion: gateway.networking.k8s.io/v1
+      kind: Gateway
+      current: >-
+        has(status.conditions) && has(status.listeners) &&
+        ['Accepted', 'Programmed'].all(t,
+          status.conditions.exists(c, c.type == t && c.status == 'True' &&
+            c.observedGeneration == metadata.generation)) &&
+        spec.listeners.all(expected, status.listeners.exists(l,
+          l.name == expected.name &&
+          ['Accepted', 'Programmed', 'ResolvedRefs'].all(t,
+            l.conditions.exists(c, c.type == t && c.status == 'True' &&
+              c.observedGeneration == metadata.generation))))
+    - apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      current: >-
+        has(status.parents) && has(spec.parentRefs) && spec.parentRefs.size() > 0 &&
+        spec.parentRefs.all(wanted, status.parents.exists(parent,
+          parent.controllerName == 'io.cilium/gateway-controller' &&
+          parent.parentRef.name == wanted.name &&
+          (has(parent.parentRef.namespace) ? parent.parentRef.namespace : metadata.namespace) ==
+            (has(wanted.namespace) ? wanted.namespace : metadata.namespace) &&
+          (has(parent.parentRef.sectionName) ? parent.parentRef.sectionName : '') ==
+            (has(wanted.sectionName) ? wanted.sectionName : '') &&
+          ['Accepted', 'ResolvedRefs'].all(t,
+            parent.conditions.exists(c, c.type == t && c.status == 'True' &&
+              c.observedGeneration == metadata.generation))))

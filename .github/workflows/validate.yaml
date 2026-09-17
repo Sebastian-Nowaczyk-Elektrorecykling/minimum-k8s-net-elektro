@@ -21,7 +21,13 @@ jobs:
           python -m pip install -r tests/requirements.txt
           mkdir -p .cache/tools
           curl -fsSL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.7.1/kustomize_v5.7.1_linux_amd64.tar.gz -o .cache/tools/kustomize.tar.gz
+          curl -fsSL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.7.1/checksums.txt -o .cache/tools/kustomize-checksums.txt
+          (cd .cache/tools && awk '$2 == "kustomize_v5.7.1_linux_amd64.tar.gz" {print $1 "  kustomize.tar.gz"}' kustomize-checksums.txt | sha256sum --check --strict)
           tar -xzf .cache/tools/kustomize.tar.gz -C .cache/tools
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz -o .cache/tools/kubeconform-linux-amd64.tar.gz
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.7.0/CHECKSUMS -o .cache/tools/kubeconform-checksums.txt
+          (cd .cache/tools && awk '$2 == "kubeconform-linux-amd64.tar.gz"' kubeconform-checksums.txt | sha256sum --check --strict)
+          tar -xzf .cache/tools/kubeconform-linux-amd64.tar.gz -C .cache/tools
           echo "$PWD/.cache/tools" >> "$GITHUB_PATH"
           dns_version=$(python -c 'import json; print(json.load(open("config/cluster.json"))["coredns_image"].rsplit(":", 1)[1])')
           dns_archive="coredns_${dns_version}_linux_amd64.tgz"

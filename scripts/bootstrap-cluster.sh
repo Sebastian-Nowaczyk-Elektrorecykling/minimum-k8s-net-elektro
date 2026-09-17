@@ -15,7 +15,9 @@ install_helm
 
 log 'Installing Gateway API CRDs before starting Cilium.'
 kubectl apply --server-side -k "$REPO_ROOT/infrastructure/gateway-api"
-kubectl wait --for=condition=Established --timeout=120s crd/gateways.gateway.networking.k8s.io crd/httproutes.gateway.networking.k8s.io
+# Wait for every CRD in the pinned bundle, including ReferenceGrant, GRPCRoute,
+# TLSRoute and BackendTLSPolicy, before the operator performs API discovery.
+kubectl wait --for=condition=Established --timeout=120s -k "$REPO_ROOT/infrastructure/gateway-api"
 # On retries after successful adoption, Flux is the sole Helm release manager.
 if kubectl -n kube-system get helmrelease cilium >/dev/null 2>&1; then
   log 'Cilium HelmRelease already exists; leaving release reconciliation to Flux.'
@@ -45,6 +47,7 @@ for component in cilium dns pki gateway admin apps; do
   kubectl -n flux-system wait "kustomization/$component" --for=condition=Ready --timeout=900s
 done
 kubectl -n kube-system wait helmrelease/cilium --for=condition=Ready --timeout=300s
+"$REPO_ROOT/scripts/check-gateway.sh"
 log 'Flux now owns the manifests and will adopt the existing cilium/kube-system Helm release.'
 log "Check scripts/status.sh, then point LAN DNS clients or the router at $API_IP."
 log 'The CA is saved under /etc/elektro/secrets (root-only). Back it up securely.'

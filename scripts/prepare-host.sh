@@ -19,6 +19,11 @@ log 'Preparing kernel, time synchronization, swap, and Longhorn V1 host prerequi
 cat > /etc/modules-load.d/elektro-k3s.conf <<'EOF'
 overlay
 br_netfilter
+vxlan
+xt_socket
+xt_TPROXY
+xt_mark
+xt_CT
 iscsi_tcp
 dm_crypt
 nfs

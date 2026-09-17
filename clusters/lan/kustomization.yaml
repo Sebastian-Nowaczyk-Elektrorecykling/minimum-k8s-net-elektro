@@ -4,3 +4,10 @@ resources:
   - flux-system
   - cluster-settings.yaml
   - infrastructure.yaml
+patches:
+  - target:
+      group: kustomize.toolkit.fluxcd.io
+      version: v1
+      kind: Kustomization
+      name: (network|gateway|admin|apps)
+    path: gateway-health.yaml

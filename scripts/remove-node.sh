@@ -32,6 +32,12 @@ export KUBECONFIG=${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}
 node_json=$(kubectl get node "$node" -o json)
 internal_ip=$(jq -r '.status.addresses[] | select(.type == "InternalIP") | .address' <<< "$node_json" | head -1)
 is_server=$(jq -r '.metadata.labels | has("node-role.kubernetes.io/etcd")' <<< "$node_json")
+if [[ $destroy == false ]]; then
+  local_ips=$(ip -j -4 addr show)
+  if jq -e --arg ip "$internal_ip" 'any(.[].addr_info[]; .local == $ip)' <<< "$local_ips" >/dev/null; then
+    die 'Run routine removal from a different surviving controller; stopping this host would cut off the API/etcd checks.'
+  fi
+fi
 if [[ $internal_ip == "$API_IP" && $destroy == false ]]; then
   die 'This node owns the API, DNS and web gateway. Migrate the shared edge endpoint first; see docs/operations.md.'
 fi
@@ -79,10 +85,8 @@ if jq -e '.items[] | select(.metadata.name == "nodes.longhorn.io")' <<< "$crds" 
   fi
 fi
 pv=$(kubectl get pv -o json)
-jq -e --arg node "$node" '[.items[] | select(.spec.local != null or .spec.hostPath != null) |
-  select(any(.spec.nodeAffinity.required.nodeSelectorTerms[]?.matchExpressions[]?;
-    .key == "kubernetes.io/hostname" and any(.values[]?; . == $node)))] | length == 0' \
-  <<< "$pv" >/dev/null || die 'Local/hostPath persistent volumes refer to this node; migrate or retire them first.'
+jq -n --argjson node "$node_json" --argjson volumes "$pv" '{node: $node, volumes: $volumes}' |
+  python3 "$REPO_ROOT/scripts/check-local-volumes.py"
 log "Plan: drain $node ($internal_ip), stop k3s via $target, remove its cluster objects, then uninstall locally. Longhorn data and host prerequisites remain."
 [[ $execute == true ]] || { log 'Read-only plan complete. Use --yes to execute.'; exit 0; }
 require_root

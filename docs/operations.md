@@ -6,6 +6,7 @@ Run these on the bootstrap server after Flux has reconciled:
 
 ```bash
 sudo ./scripts/status.sh
+sudo ./scripts/check-gateway.sh
 sudo k3s kubectl get pods -A
 sudo k3s kubectl -n kube-system get helmrelease cilium
 sudo k3s kubectl -n gateway-system describe gateway internal
@@ -20,6 +21,10 @@ Check Gateway conditions `Accepted=True` and `Programmed=True`, and HTTPRoute
 parent conditions `Accepted=True` and `ResolvedRefs=True`. All Flux Kustomizations
 and HelmReleases should become Ready. The Cilium Helm release must be the same
 release created by bootstrap (`helm history cilium -n kube-system`).
+
+Gateway readiness includes every listener's references and the current object
+generation. For legacy Ingress inventory and migration, see
+[Gateway migration](gateway-migration.md).
 
 From a LAN client with `dig` installed, check both DNS transports and private
 AAAA behavior:
@@ -124,6 +129,11 @@ the appropriate administrators/nodes. Cilium VXLAN requires MTU headroom (usuall
 50 bytes); auto-detection is used. Override Cilium values if the underlay needs
 a smaller MTU. Cilium Gateway host networking binds all interfaces on the edge
 node, so restrict web ports to the intended LAN with your firewall.
+
+Host preparation persists and loads VXLAN and the `xt_socket`, `xt_TPROXY`,
+`xt_mark`, `xt_CT` kernel modules needed by the configured Cilium proxy path.
+On an existing host, rerun preparation during maintenance to install this
+policy. Custom kernels must supply equivalent built-in/module support.
 
 | Traffic | Protocol/port | Sources and destinations |
 | --- | --- | --- |
@@ -292,6 +302,11 @@ migrate/detach workloads first. It then honors PodDisruptionBudgets during
 drain. Unmanaged Pods block removal; inspect them rather than bypassing the
 guard. `--delete-emptydir-data` explicitly allows losing emptyDir contents.
 
+Routine removal rejects the controller executing the command: run it from a
+different surviving controller. Local/hostPath checks use all node-affinity
+terms and actual labels/fields, including custom hostname labels. An unscoped
+hostPath PV conservatively blocks removal until migrated or retired.
+
 For a server it requires at least three healthy etcd members before routine
 removal, compares Kubernetes servers with real etcd membership, checks endpoint
 health, and creates a snapshot. After drain, it stops k3s on the target and
@@ -327,6 +342,10 @@ token is needed to restore encrypted bootstrap data. Server snapshots are taken
 twice daily and retain 14 local snapshots; local retention is not off-host
 backup. Configure an appropriate S3/backup destination separately. Also preserve
 the CA and any future SSO/workload secrets outside Git.
+
+CA initialization preserves backups if the API read fails or a certificate/key
+pair is invalid. A partial local backup is an error, not permission to generate
+a replacement trust root; restore both files before retrying.
 
 Changing `config/cluster.json` plus regeneration changes Git-managed software;
 it does not modify already installed host settings. For k3s upgrades, review

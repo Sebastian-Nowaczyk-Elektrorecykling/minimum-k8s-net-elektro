@@ -39,6 +39,18 @@ class ConfigurationTests(unittest.TestCase):
         self.reject(upstream_dns=[self.c["cluster_dns_ip"]])
         self.reject(upstream_dns=["127.0.0.1"])
 
+    def test_rejects_unknown_keys_types_and_unpinned_versions(self):
+        self.reject(api_adress="192.168.2.153")
+        self.reject(cilium_devices="eno1")
+        self.reject(upstream_dns="1.1.1.1")
+        self.reject(cilium_version="latest")
+        self.reject(flux_version="v2.9.5\nextra")
+
+    def test_rejects_private_domain_shadowing_cluster_dns(self):
+        for domain in ("local", "cluster.local", "apps.cluster.local", "a" * 64 + ".internal"):
+            with self.subTest(domain=domain):
+                self.reject(domain=domain)
+
     def test_rejects_network_broadcast_and_outside(self):
         self.reject(api_ip="192.168.15.255")
         self.reject(api_ip="192.168.16.1")

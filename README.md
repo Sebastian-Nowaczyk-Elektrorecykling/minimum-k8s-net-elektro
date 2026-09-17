@@ -22,6 +22,11 @@ preparation is limited to host prerequisites. Cert-manager handles private TLS.
 Hubble UI is available directly over HTTPS without a login during bootstrap;
 its gateway backend can be switched to an SSO proxy later.
 
+HTTP/HTTPS routing uses **Gateway API v1**. Cilium Ingress, Hubble Ingress and
+cert-manager ingress-shim are explicitly disabled. See the
+[Gateway migration guide](docs/gateway-migration.md) and
+[repository audit](docs/audit-2026-09-17.md) for findings and rollout checks.
+
 ## Configure and bootstrap
 
 Use fresh Debian 13 hosts with unique hostnames and mutually reachable LAN
@@ -99,6 +104,7 @@ address change while a node is running requires a controlled k3s restart; see
 | `install-controller.sh --bootstrap` | First dedicated controller; follow with `bootstrap-cluster.sh` |
 | `prepare-host.sh` | Host prerequisites only |
 | `configure-power.sh` | Apply the node power policy without reinstalling k3s |
+| `check-gateway.sh` | Read-only Gateway readiness and legacy Ingress audit |
 | `remove-node.sh` | Safety checks, drain, cluster removal and remote uninstall |
 
 Dedicated controllers retain kubelet/Cilium. Add two more servers for a
@@ -191,7 +197,8 @@ sudo ./scripts/status.sh
 sudo k3s kubectl get pods -A
 ```
 
-For local repository checks, install Helm and Kustomize, then:
+For local repository checks, install Helm, Kustomize, kubeconform and ShellCheck,
+then:
 
 ```bash
 python3 -m venv .venv

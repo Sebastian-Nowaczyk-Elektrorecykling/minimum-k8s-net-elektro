@@ -15,10 +15,35 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config/cluster.json"
+CONFIG_KEYS = set("""cluster_name git_url git_branch lan_cidr api_ip pod_cidr
+service_cidr cluster_dns_ip lan_dns_service_ip domain hubble_backend_service
+hubble_backend_namespace hubble_backend_port upstream_dns cilium_devices
+operator_replicas k3s_version cilium_version gateway_api_version flux_version
+helm_version cert_manager_version coredns_image nvidia_toolkit_version""".split())
 
 
 def load(path=CONFIG):
     c = json.loads(Path(path).read_text())
+    if not isinstance(c, dict):
+        raise ValueError("Configuration must be a JSON object")
+    if set(c) != CONFIG_KEYS:
+        raise ValueError(f"Missing settings: {sorted(CONFIG_KEYS - set(c))}; unknown settings: {sorted(set(c) - CONFIG_KEYS)}")
+    for key in CONFIG_KEYS - {"upstream_dns", "cilium_devices", "operator_replicas", "hubble_backend_port"}:
+        if not isinstance(c[key], str) or not c[key]:
+            raise ValueError(f"{key} must be a nonempty string")
+    for key in ("upstream_dns", "cilium_devices"):
+        if not isinstance(c[key], list) or any(not isinstance(v, str) or not v for v in c[key]):
+            raise ValueError(f"{key} must be a list of nonempty strings")
+    for key in CONFIG_KEYS:
+        if key.endswith("_version") and not re.fullmatch(r"v?\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?", c[key]):
+            raise ValueError(f"{key} must be a pinned release version")
+    if not re.fullmatch(r"v\d+\.\d+\.\d+\+k3s\d+", c["k3s_version"]):
+        raise ValueError("k3s_version must be a release tag such as v1.36.4+k3s1")
+    if c["cilium_version"].startswith("v"):
+        raise ValueError("cilium_version must omit the v prefix")
+    for key in ("flux_version", "gateway_api_version", "helm_version"):
+        if not c[key].startswith("v"):
+            raise ValueError(f"{key} must include the v prefix")
     networks = {k: ipaddress.IPv4Network(c[k]) for k in
                 ("lan_cidr", "pod_cidr", "service_cidr")}
     for a, b in (("lan_cidr", "pod_cidr"), ("lan_cidr", "service_cidr"),
@@ -32,16 +57,17 @@ def load(path=CONFIG):
                        ("cluster_dns_ip", "lan_dns_service_ip") else "lan_cidr"]
         if ip not in net or ip in (net.network_address, net.broadcast_address):
             raise ValueError(f"{key} must be a usable address in {net}")
-    forbidden = {"dns_ip", "gateway_ip", "lb_start", "lb_stop", "l2_interfaces", "dns_replicas", "monitoring_version"}
-    if forbidden.intersection(c):
-        raise ValueError("Use api_ip as the single LAN endpoint; remove obsolete VIP/monitoring settings")
     reserved = networks["service_cidr"].network_address + 1
     if c["cluster_dns_ip"] == c["lan_dns_service_ip"] or any(
             ipaddress.ip_address(c[k]) == reserved
             for k in ("cluster_dns_ip", "lan_dns_service_ip")):
         raise ValueError("DNS Service addresses collide with each other or Kubernetes")
-    if not re.fullmatch(r"[a-z0-9]+(?:[-.][a-z0-9]+)*", c["domain"]):
+    if len("hubble.admin." + c["domain"]) > 253 or any(
+            len(label) > 63 or not re.fullmatch(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?", label)
+            for label in c["domain"].split(".")):
         raise ValueError("domain must be a lowercase DNS name")
+    if c["domain"] == "cluster.local" or c["domain"].endswith(".cluster.local") or "cluster.local".endswith("." + c["domain"]):
+        raise ValueError("domain must not overlap Kubernetes' cluster.local DNS zone")
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,30}", c["cluster_name"]):
         raise ValueError("Invalid cluster_name")
     for key in ("hubble_backend_service", "hubble_backend_namespace"):
@@ -57,7 +83,7 @@ def load(path=CONFIG):
         raise ValueError("At least one upstream DNS address is required")
     for value in c["upstream_dns"]:
         ip = ipaddress.ip_address(value)
-        if ip.is_loopback or str(ip) in (c["api_ip"], c["lan_dns_service_ip"], c["cluster_dns_ip"]):
+        if ip.is_loopback or ip.is_unspecified or ip.is_multicast or str(ip) in (c["api_ip"], c["lan_dns_service_ip"], c["cluster_dns_ip"]):
             raise ValueError("Recursive DNS loop in upstream_dns")
     for key in ("operator_replicas",):
         if not isinstance(c[key], int) or isinstance(c[key], bool) or c[key] < 1:
@@ -79,6 +105,10 @@ def cilium_values(c):
         "routingMode": "tunnel", "tunnelProtocol": "vxlan",
         "bpf": {"masquerade": True},
         "l2announcements": {"enabled": False},
+        # Gateway API owns north-south routing. Do not inherit Ingress defaults
+        # from a future chart or accidentally expose Hubble through a second path.
+        "ingressController": {"enabled": False, "default": False},
+        "l7Proxy": True,
         "gatewayAPI": {"enabled": True, "gatewayClass": {"create": "false"},
                        "hostNetwork": {"enabled": True, "nodes": {
                            "matchLabels": {"elektro.internal/edge": "true"}}}},
@@ -97,7 +127,8 @@ def cilium_values(c):
             "tls": {"enabled": True, "auto": {"enabled": True, "method": "cronJob"}},
             "relay": {"enabled": True, "tolerations": tolerations,
                       "prometheus": {"enabled": True}},
-            "ui": {"enabled": True, "tolerations": tolerations},
+            "ui": {"enabled": True, "tolerations": tolerations,
+                   "ingress": {"enabled": False}},
             "metrics": {"enabled": ["dns", "drop", "tcp", "flow", "icmp",
                          "httpV2:exemplars=true;labelsContext=source_namespace,destination_namespace"],
                         "enableOpenMetrics": True, "dashboards": {"enabled": True}}},

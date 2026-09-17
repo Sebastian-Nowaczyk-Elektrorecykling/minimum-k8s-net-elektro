@@ -26,6 +26,8 @@ spec:
     remediation: {retries: 3}
   values:
     crds: {enabled: true}
+    # TLS is owned by explicit Certificate resources, not Ingress annotations.
+    extraArgs: ['--controllers=*,-ingress-shim']
     prometheus: {enabled: true}
     tolerations:
       - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
