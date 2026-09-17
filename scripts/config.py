@@ -44,6 +44,15 @@ def load(path=CONFIG):
         raise ValueError("domain must be a lowercase DNS name")
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,30}", c["cluster_name"]):
         raise ValueError("Invalid cluster_name")
+    for key in ("hubble_backend_service", "hubble_backend_namespace"):
+        value = c[key]
+        first = "[a-z]" if key == "hubble_backend_service" else "[a-z0-9]"
+        if not isinstance(value, str) or len(value) > 63 or not re.fullmatch(
+                first + r"(?:[-a-z0-9]*[a-z0-9])?", value):
+            raise ValueError(f"Invalid Kubernetes name for {key}")
+    port = c["hubble_backend_port"]
+    if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
+        raise ValueError("hubble_backend_port must be an integer from 1 to 65535")
     if not c["upstream_dns"]:
         raise ValueError("At least one upstream DNS address is required")
     for value in c["upstream_dns"]:

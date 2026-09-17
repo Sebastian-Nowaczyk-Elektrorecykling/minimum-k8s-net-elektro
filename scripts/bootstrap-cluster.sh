@@ -29,7 +29,7 @@ fi
 kubectl -n kube-system rollout status daemonset/cilium --timeout=300s
 kubectl -n kube-system rollout status deployment/coredns --timeout=300s
 
-log 'Creating private CA and administration credentials outside Git.'
+log 'Creating the private CA outside Git.'
 "$REPO_ROOT/scripts/initialize-secrets.sh"
 log 'Installing Flux controllers, then its Git source and reconciliation graph.'
 kubectl apply --server-side -k "$REPO_ROOT/infrastructure/flux"
@@ -47,4 +47,5 @@ done
 kubectl -n kube-system wait helmrelease/cilium --for=condition=Ready --timeout=300s
 log 'Flux now owns the manifests and will adopt the existing cilium/kube-system Helm release.'
 log "Check scripts/status.sh, then point LAN DNS clients or the router at $API_IP."
-log 'CA and administration credentials are saved under /etc/elektro/secrets (root-only). Back them up securely.'
+log 'The CA is saved under /etc/elektro/secrets (root-only). Back it up securely.'
+log 'Hubble UI has no login during bootstrap. See docs/hubble-sso.md for connecting an SSO proxy later.'

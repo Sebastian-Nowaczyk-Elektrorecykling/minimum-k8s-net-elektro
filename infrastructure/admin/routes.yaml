@@ -10,4 +10,8 @@ spec:
     - hubble.${ADMIN_DOMAIN}
   rules:
     - backendRefs:
-        - {name: admin-proxy, port: 80}
+        # Direct during bootstrap. Later point these settings at an SSO proxy
+        # Service owned by your platform repository; this route retains one owner.
+        - name: ${HUBBLE_BACKEND_SERVICE}
+          namespace: ${HUBBLE_BACKEND_NAMESPACE}
+          port: ${HUBBLE_BACKEND_PORT}

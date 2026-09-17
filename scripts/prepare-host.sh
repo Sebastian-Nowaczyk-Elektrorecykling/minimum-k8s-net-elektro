@@ -9,7 +9,7 @@ case "$gpu" in auto|none|nvidia|amd|intel) ;; *) die 'GPU_VENDOR must be auto, n
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends ca-certificates curl gnupg python3 jq git sudo openssh-client \
-  openssl apache2-utils etcd-client iproute2 iptables nftables conntrack socat ethtool \
+  openssl etcd-client iproute2 iptables nftables conntrack socat ethtool \
   pciutils kmod util-linux apparmor apparmor-utils chrony \
   open-iscsi nfs-common cryptsetup dmsetup xfsprogs e2fsprogs
 load_config

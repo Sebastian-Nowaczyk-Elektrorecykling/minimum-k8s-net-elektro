@@ -49,6 +49,17 @@ class ConfigurationTests(unittest.TestCase):
         self.reject(gateway_ip="192.168.2.155")
         self.reject(monitoring_version="91.4.1")
 
+    def test_rejects_invalid_hubble_service_reference(self):
+        self.reject(hubble_backend_service="hubble.sso")
+        self.reject(hubble_backend_service="https://hubble.internal")
+        self.reject(hubble_backend_namespace="SSO")
+        self.reject(hubble_backend_namespace="sso-")
+
+    def test_rejects_invalid_hubble_service_port(self):
+        for port in (0, 65536, "4180", True):
+            with self.subTest(port=port):
+                self.reject(hubble_backend_port=port)
+
     def test_roles_and_first_server_are_distinct(self):
         worker = config.node_config(self.c, "worker", "192.168.2.170", "eno1")
         self.assertIn("token-file", worker)

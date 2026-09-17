@@ -11,6 +11,7 @@ sudo k3s kubectl -n kube-system get helmrelease cilium
 sudo k3s kubectl -n gateway-system describe gateway internal
 sudo k3s kubectl -n gateway-system get certificate internal-wildcard
 sudo k3s kubectl -n administration describe httproute administration
+sudo k3s kubectl get referencegrant hubble-backend -n kube-system
 sudo k3s kubectl get nodes -l elektro.internal/edge=true -o wide
 sudo k3s kubectl -n lan-system get pods -o wide
 ```
@@ -31,9 +32,7 @@ dig @192.168.2.153 app.internal AAAA
 dig @192.168.2.153 debian.org A +short
 
 curl --cacert ca.crt -I --resolve hubble.admin.internal:443:192.168.2.153 \
-  https://hubble.admin.internal   # expect 401 without credentials
-curl --cacert ca.crt -u admin --resolve hubble.admin.internal:443:192.168.2.153 \
-  https://hubble.admin.internal   # curl prompts for the password
+  https://hubble.admin.internal   # expect 200; no login during bootstrap
 ```
 
 All three A answers should be `192.168.2.153`.
@@ -49,6 +48,10 @@ Check `https://whoami.internal` from the LAN and `.internal` lookups from an
 application Pod. Reboot the bootstrap host to verify persistent setup, then
 join at least one worker and repeat cross-node traffic tests. The API, DNS and
 gateway all depend on the `.153` node; they do not fail over to DHCP nodes.
+For a configured SSO backend, inspect `hubble-backend` in that backend
+namespace and expect the configured login flow instead of an anonymous 200.
+See [Hubble SSO](hubble-sso.md) for switching the route and upgrading from the
+previous Basic authentication proxy.
 
 ## LAN DNS fails with `exec /coredns: operation not permitted`
 
@@ -270,7 +273,7 @@ Back up `/var/lib/rancher/k3s/server/token` together with etcd snapshots. The
 token is needed to restore encrypted bootstrap data. Server snapshots are taken
 twice daily and retain 14 local snapshots; local retention is not off-host
 backup. Configure an appropriate S3/backup destination separately. Also preserve
-the CA, credentials and any future workload secrets outside Git.
+the CA and any future SSO/workload secrets outside Git.
 
 Changing `config/cluster.json` plus regeneration changes Git-managed software;
 it does not modify already installed host settings. For k3s upgrades, review
@@ -282,7 +285,7 @@ server. Match critical k3s flags across servers. Do not change pod/service CIDRs
 in place; rebuild/migrate the cluster.
 
 For an edge endpoint migration, plan a maintenance window: `.153` owns the API,
-DNS and gateway together. Back up etcd, tokens, CA and credentials. Arrange the
+DNS and gateway together. Back up etcd, tokens, CA and workload secrets. Arrange the
 replacement host/address, add the required API SANs on all servers, and verify
 API access before updating Git's `api_ip`, Cilium values, join endpoints,
 kubeconfigs, router DNS forwarding and host address-discovery settings. Move

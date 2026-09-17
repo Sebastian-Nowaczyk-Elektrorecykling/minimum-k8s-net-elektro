@@ -18,8 +18,9 @@ controllers, workers and hybrids can use DHCP.
 Cilium includes Hubble UI/Relay, flow metrics, agent/operator/Envoy metrics and
 its bundled dashboard definitions. **No Prometheus, Grafana, Alertmanager,
 Longhorn, GPU Operator or GPU device plugin is installed.** Longhorn and GPU
-preparation is limited to host prerequisites. Cert-manager handles private TLS;
-a small Nginx proxy authenticates access to Hubble UI.
+preparation is limited to host prerequisites. Cert-manager handles private TLS.
+Hubble UI is available directly over HTTPS without a login during bootstrap;
+its gateway backend can be switched to an SSO proxy later.
 
 ## Configure and bootstrap
 
@@ -51,7 +52,7 @@ sudo ./scripts/bootstrap-hybrid.sh --interface eno1
 ```
 
 This prepares the host, starts an embedded-etcd k3s server that also runs
-workloads, installs the pinned Cilium release, creates local CA/login secrets,
+workloads, installs the pinned Cilium release, creates the private CA,
 and installs Flux. Flux then adopts Cilium and reconciles DNS, TLS, gateway and
 administration resources from this repository. NVIDIA driver installation may
 require a reboot; after `nvidia-smi` works, rerun the command. Use
@@ -130,17 +131,23 @@ Browsers with independent trust stores may need an import too. Back up the CA
 key securely; never distribute it or commit it.
 
 Open **`https://hubble.admin.internal`** for Hubble's flow view and service map.
-Retrieve the generated login on the bootstrap host:
+There is **no username/password prompt during bootstrap**. The gateway routes
+directly to Cilium's `hubble-ui` Service, using the same private HTTPS certificate.
 
-```bash
-sudo cat /etc/elektro/secrets/username
-sudo cat /etc/elektro/secrets/password
-```
+When your SSO platform is ready, deploy its authentication proxy from your
+second Flux repository and set these fields in `config/cluster.json` to that
+proxy's Service:
 
-The proxy uses HTTPS and Basic authentication. Replace that shared login with
-your identity provider when appropriate. Namespace labels select which gateway
-listener applications can attach to; only administrators should edit them.
-A hostname is not an authorization boundary.
+| Setting | Bootstrap default |
+| --- | --- |
+| `hubble_backend_service` | `hubble-ui` |
+| `hubble_backend_namespace` | `kube-system` |
+| `hubble_backend_port` | `80` |
+
+Regenerate and commit the configuration to switch the existing route. Hubble
+itself stays in the Cilium release. [docs/hubble-sso.md](docs/hubble-sso.md)
+describes the ownership split, proxy requirements and transition from an
+existing password-protected installation.
 
 ## Applications, storage and GPUs
 

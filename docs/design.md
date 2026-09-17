@@ -8,8 +8,8 @@ flowchart TD
   API --> K3s[k3s control plane]
   LAN --> Gateway["192.168.2.153:80/443"]
   Gateway --> Apps[Application routes]
-  Gateway --> Auth[Administration authentication]
-  Auth --> Hubble[Hubble UI and Relay]
+  Gateway --> Hubble[Hubble UI]
+  Hubble --> Relay[Hubble Relay]
 ```
 
 The bootstrap node alone has `elektro.internal/edge=true`. Cilium's Gateway API
@@ -50,17 +50,24 @@ The optional monitoring examples are outside the reconciliation graph.
 Critical CNI, PKI and Gateway API CRD targets disable pruning. Removing those
 paths from Git cannot silently uninstall networking or the CA; decommission
 them deliberately. Other workload targets prune normally. Bootstrap-created
-CA/credential Secrets are outside Flux inventories and need separate backups.
+CA Secrets are outside Flux inventories and need separate backups.
 
 `config.py generate` writes cluster settings, Cilium values, Git source and
 pinned remote references. Flux substitutes settings into the other manifests.
-`CONFIG_REVISION` rolls DNS and authentication Pods when settings change. Host
+`CONFIG_REVISION` rolls DNS Pods when settings change. Host
 settings are not reconciled by Flux. Changing IPs or server flags is a planned
 migration, and Pod/Service CIDR changes require rebuilding/migrating the cluster.
 
 HTTPS terminates at Envoy. Separate application/administration listeners use
-hostname and namespace selectors. Hubble UI passes through an unprivileged
-Nginx authentication proxy. Hubble gRPC and metrics are not routed onto the LAN;
+hostname and namespace selectors. During bootstrap, the administration route
+forwards directly to the `hubble-ui` Service without authentication. A narrowly
+scoped ReferenceGrant allows the cross-namespace Service reference. Three
+configuration fields select this backend; later they can point to an SSO proxy
+owned by a second repository. The base repository keeps ownership of the route
+and grant, while the second owns the proxy and identity provider, avoiding
+competing reconciliation. See [Hubble SSO](hubble-sso.md).
+
+Hubble gRPC and metrics are not routed onto the LAN;
 Hubble agent host port 4244 is for trusted cluster peers and should be restricted
 by your firewall. This baseline assumes trusted administrators and controlled
 workload deployment; it is not a hostile multi-tenant isolation policy.
@@ -74,6 +81,7 @@ workload deployment; it is not a hostile multi-tenant isolation policy.
 - [Cilium native HostPort support](https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/#container-hostport-support)
 - [Cilium/Hubble metrics](https://docs.cilium.io/en/stable/observability/metrics/)
 - [k3s runtime discovery and CoreDNS customization](https://docs.k3s.io/advanced)
+- [Gateway API ReferenceGrant](https://gateway-api.sigs.k8s.io/api-types/referencegrant/)
 - [Flux HelmRelease API](https://fluxcd.io/flux/components/helm/helmreleases/)
 - [Longhorn host prerequisites](https://longhorn.io/docs/latest/deploy/install/)
 - [NVIDIA Container Toolkit installation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)

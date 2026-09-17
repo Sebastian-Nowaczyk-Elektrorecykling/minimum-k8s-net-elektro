@@ -9,6 +9,9 @@
   "cluster_dns_ip": "10.43.0.10",
   "lan_dns_service_ip": "10.43.0.54",
   "domain": "internal",
+  "hubble_backend_service": "hubble-ui",
+  "hubble_backend_namespace": "kube-system",
+  "hubble_backend_port": 80,
   "upstream_dns": [
     "1.1.1.1",
     "9.9.9.9"
@@ -22,6 +25,5 @@
   "helm_version": "v3.19.0",
   "cert_manager_version": "v1.21.2",
   "coredns_image": "coredns/coredns:1.14.7",
-  "nginx_image": "nginx:1.30.5-alpine",
   "nvidia_toolkit_version": "1.20.0-1"
 }
