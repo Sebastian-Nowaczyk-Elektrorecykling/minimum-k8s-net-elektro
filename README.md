@@ -67,6 +67,9 @@ administration resources from this repository. NVIDIA driver installation may
 require a reboot; after `nvidia-smi` works, rerun the command. Use
 `sudo GPU_VENDOR=none ...` on a host where GPU preparation is not wanted.
 
+If cluster software setup is interrupted after k3s has started, resume from a
+clean, up-to-date checkout with `sudo ./scripts/bootstrap-cluster.sh`.
+
 For a first **dedicated controller** instead:
 
 ```bash

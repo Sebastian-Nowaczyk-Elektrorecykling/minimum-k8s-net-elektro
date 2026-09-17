@@ -37,3 +37,19 @@ install_helm() {
   rm -rf -- "$tmp"
 }
 kubectl() { /usr/local/bin/k3s kubectl "$@"; }
+
+install_gateway_api() {
+  local gateway_applied gateway_resource
+  local -a gateway_crds=()
+  gateway_applied=$(kubectl apply --server-side -k "$REPO_ROOT/infrastructure/gateway-api" -o name) || return
+  # kubectl wait accepts resource names, not -k. The bundle also contains
+  # admission policies, which do not expose a CRD Established condition.
+  while IFS= read -r gateway_resource; do
+    case "$gateway_resource" in
+      customresourcedefinition.apiextensions.k8s.io/*) gateway_crds+=("$gateway_resource") ;;
+    esac
+  done <<< "$gateway_applied"
+  ((${#gateway_crds[@]} > 0)) || die 'Gateway API bundle did not contain any CRDs.'
+  # Wait for every applied CRD before Cilium performs API discovery.
+  kubectl wait --for=condition=Established --timeout=120s "${gateway_crds[@]}"
+}

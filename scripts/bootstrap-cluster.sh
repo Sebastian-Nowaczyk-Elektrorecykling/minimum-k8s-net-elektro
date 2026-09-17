@@ -14,10 +14,7 @@ kubectl get --raw=/readyz >/dev/null
 install_helm
 
 log 'Installing Gateway API CRDs before starting Cilium.'
-kubectl apply --server-side -k "$REPO_ROOT/infrastructure/gateway-api"
-# Wait for every CRD in the pinned bundle, including ReferenceGrant, GRPCRoute,
-# TLSRoute and BackendTLSPolicy, before the operator performs API discovery.
-kubectl wait --for=condition=Established --timeout=120s -k "$REPO_ROOT/infrastructure/gateway-api"
+install_gateway_api
 # On retries after successful adoption, Flux is the sole Helm release manager.
 if kubectl -n kube-system get helmrelease cilium >/dev/null 2>&1; then
   log 'Cilium HelmRelease already exists; leaving release reconciliation to Flux.'
