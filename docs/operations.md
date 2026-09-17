@@ -50,6 +50,33 @@ application Pod. Reboot the bootstrap host to verify persistent setup, then
 join at least one worker and repeat cross-node traffic tests. The API, DNS and
 gateway all depend on the `.153` node; they do not fail over to DHCP nodes.
 
+## LAN DNS fails with `exec /coredns: operation not permitted`
+
+The upstream CoreDNS image marks `/coredns` with the file capability
+`cap_net_bind_service=ep`. Dropping that capability from the container's bounding
+set can make Linux reject execution with EPERM, before the Corefile is read.
+Listening on port 1053 does not avoid this executable-file check. See the
+[pinned image Dockerfile](https://github.com/coredns/coredns/blob/v1.14.7/Dockerfile)
+and [Linux capability execution checks](https://man7.org/linux/man-pages/man7/capabilities.7.html).
+
+The deployment drops all capabilities and adds back only `NET_BIND_SERVICE`.
+It still runs as UID/GID 65532, with privilege escalation disabled, a read-only
+root filesystem and RuntimeDefault seccomp. CI executes the actual container
+image with these settings as well as testing DNS queries against CoreDNS.
+
+Flux will reconcile the corrected manifest from `main`. If DNS needs immediate
+recovery before reconciliation, apply the same change to the running deployment:
+
+```bash
+sudo k3s kubectl -n lan-system patch deployment lan-dns --type=strategic \
+  -p '{"spec":{"template":{"spec":{"containers":[{"name":"coredns","securityContext":{"capabilities":{"drop":["ALL"],"add":["NET_BIND_SERVICE"]}}}]}}}'
+sudo k3s kubectl -n lan-system rollout status deployment/lan-dns --timeout=180s
+```
+
+This rolls the DNS pod. Ensure Flux has fetched the fixed Git revision so it
+does not restore the old security context. No host security policy changes are
+needed for this image/manifest mismatch.
+
 ## Cilium observability
 
 For deeper diagnostics, install the upstream Cilium and Hubble CLIs on an

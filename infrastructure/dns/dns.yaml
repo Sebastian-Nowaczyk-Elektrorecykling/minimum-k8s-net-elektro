@@ -74,7 +74,12 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
-            capabilities: {drop: [ALL]}
+            # The upstream /coredns binary has cap_net_bind_service=ep. Keep
+            # that capability in the bounding set or execve can fail with EPERM,
+            # even though this Corefile listens on unprivileged port 1053.
+            capabilities:
+              drop: [ALL]
+              add: [NET_BIND_SERVICE]
           readinessProbe: {httpGet: {path: /ready, port: 8181}}
           livenessProbe: {httpGet: {path: /health, port: 8080}}
           volumeMounts:
