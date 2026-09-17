@@ -165,6 +165,59 @@ the next. This refresh does not promise uninterrupted sessions or automatic
 recovery of a damaged etcd quorum. Re-running an installation script also
 restarts its k3s service and must be planned accordingly.
 
+## Node power policy
+
+All controller, worker and hybrid installation paths run `prepare-host.sh`,
+which calls `configure-power.sh`. The policy persists across reboots. Apply it
+to an existing node without reinstalling or restarting k3s:
+
+```bash
+git pull --ff-only
+sudo ./scripts/configure-power.sh
+```
+
+Lid closure is ignored on battery, on external power and while docked. Idle
+timers and short/long presses of sleep or hibernate keys do nothing. A short
+press of the physical power button requests ordinary suspend; hibernation,
+hybrid sleep and suspend-then-hibernate are disabled. Application sleep
+inhibitors do not block that physical button. A firmware-enforced power-off
+from holding the power button cannot be disabled by this operating-system
+policy.
+
+The script installs these files:
+
+| Host file | Purpose |
+| --- | --- |
+| `/etc/systemd/logind.conf.d/90-elektro-node-power.conf` | Power button, lid, keys and idle policy |
+| `/etc/systemd/sleep.conf.d/90-elektro-node-power.conf` | Keep plain suspend available; disable hibernation modes |
+| `/etc/polkit-1/rules.d/10-elektro-node-power.rules` | Deny non-root desktop sleep requests and takeover of logind's key/lid handling |
+
+The polkit rule loads automatically if polkit is installed, including when a
+desktop is installed later. Root/sudo can still explicitly manage power; this
+policy does not restrict privileged administrators or hardware firmware. The
+script removes persistent/runtime masks on `sleep.target`, `suspend.target`
+and `systemd-suspend.service`, since those masks would also prevent the power
+button from working. It reloads logind without restarting user sessions.
+
+If a desktop already holds a key/lid inhibitor, the script reports it. Log out
+of local desktop sessions or reboot during maintenance before relying on the
+power-button policy. Reloading configuration cannot revoke existing locks.
+Inspect the merged settings and inhibitor holders with:
+
+```bash
+systemd-analyze cat-config systemd/logind.conf
+systemd-analyze cat-config systemd/sleep.conf
+systemd-inhibit --list
+journalctl -b -u systemd-logind --no-pager
+```
+
+Later local drop-ins or earlier polkit rules can override this configuration;
+check them if the effective behavior differs. After setup, verify the node
+stays reachable with its lid closed and while idle. Test power-button
+suspend/resume during maintenance, with workloads drained as appropriate:
+the host's firmware and kernel must support suspend, and suspending the
+static API/gateway/DNS node takes those entry points offline.
+
 ## Longhorn and GPU readiness
 
 Longhorn's default filesystem path is `/var/lib/longhorn`. Mount a suitable

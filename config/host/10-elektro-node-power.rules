@@ -1,0 +1,13 @@
+// Desktop power managers must not suspend a node or take key/lid handling
+// away from logind. Physical button handling in logind does not use polkit.
+// Privileged administration remains available through root/sudo.
+polkit.addRule(function(action, subject) {
+    if (subject.user === "root") {
+        return;
+    }
+    if (/^org\.freedesktop\.login1\.(suspend|hibernate|hybrid-sleep|suspend-then-hibernate|sleep)(-.*)?$/.test(action.id) ||
+        /^org\.freedesktop\.login1\.inhibit-handle-(power-key|suspend-key|hibernate-key|lid-switch|reboot-key)$/.test(action.id)) {
+        // The reboot-key permission also implies the suspend/lid permissions.
+        return polkit.Result.NO;
+    }
+});

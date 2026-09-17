@@ -98,10 +98,19 @@ address change while a node is running requires a controlled k3s restart; see
 | `bootstrap-hybrid.sh` | First hybrid and full Flux bootstrap |
 | `install-controller.sh --bootstrap` | First dedicated controller; follow with `bootstrap-cluster.sh` |
 | `prepare-host.sh` | Host prerequisites only |
+| `configure-power.sh` | Apply the node power policy without reinstalling k3s |
 | `remove-node.sh` | Safety checks, drain, cluster removal and remote uninstall |
 
 Dedicated controllers retain kubelet/Cilium. Add two more servers for a
 three-member etcd cluster; two members do not provide failure tolerance.
+
+Host preparation keeps every node awake when idle or when its lid closes,
+including on battery, external power, or a dock. Sleep/hibernate keys and
+desktop suspend requests are disabled. A **short press of the physical power
+button suspends** the machine. To apply this to an existing node after pulling
+the repository, run `sudo ./scripts/configure-power.sh`. See the
+[power policy](docs/operations.md#node-power-policy) for existing desktop
+sessions and verification. `--skip-host-preparation` also skips this policy.
 
 ## LAN DNS and HTTPS
 

@@ -13,6 +13,7 @@ apt-get install -y --no-install-recommends ca-certificates curl gnupg python3 jq
   pciutils kmod util-linux apparmor apparmor-utils chrony \
   open-iscsi nfs-common cryptsetup dmsetup xfsprogs e2fsprogs
 load_config
+"$REPO_ROOT/scripts/configure-power.sh"
 
 log 'Preparing kernel, time synchronization, swap, and Longhorn V1 host prerequisites.'
 cat > /etc/modules-load.d/elektro-k3s.conf <<'EOF'
