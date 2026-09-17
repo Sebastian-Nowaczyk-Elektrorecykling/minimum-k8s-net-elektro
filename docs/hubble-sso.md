@@ -1,12 +1,12 @@
 # Hubble access and SSO
 
 During bootstrap, `https://hubble.admin.internal` opens Hubble without a login.
-Cilium's HTTPS gateway routes straight to `kube-system/hubble-ui:80`. The private
-CA and wildcard certificate still apply; LAN DNS and the gateway still use
-`192.168.2.153`. No Nginx authentication proxy or bootstrap password is created.
+Cilium's HTTPS gateway routes straight to `kube-system/hubble-ui:80`, using the
+private CA and wildcard certificate. LAN DNS and the gateway use
+`192.168.2.153`.
 
 Hubble server, Relay, UI, TLS between agents and Relay, and metrics remain part
-of the existing Cilium Helm release. SSO is added at the HTTP access layer.
+of the Cilium Helm release. SSO is added at the HTTP access layer.
 
 ## Ownership contract
 
@@ -58,7 +58,7 @@ proxy is deployed in `administration` or another chosen namespace.
 3. Run `python3 scripts/config.py generate` and `python3 scripts/config.py check`,
    then commit and push the JSON and generated settings. Flux updates the same
    HTTPRoute and creates a ReferenceGrant scoped to the selected Service. It
-   prunes the old grant when the target namespace changes.
+   removes the grant from the former backend namespace when the namespace changes.
 4. Check `Accepted=True` and `ResolvedRefs=True` on the route, then visit Hubble
    in a fresh browser session to verify login and the live flow view:
 
@@ -67,7 +67,7 @@ proxy is deployed in `administration` or another chosen namespace.
    sudo k3s kubectl -n administration get referencegrant hubble-backend
    ```
 
-The existing administration namespace already exists during bootstrap, making
+The administration namespace is created during bootstrap, making
 it a convenient home for the proxy. A ReferenceGrant in that same namespace is
 harmless; cross-namespace backends require it. The grant permits references only
 from HTTPRoutes in `administration` to the one selected Service.
@@ -81,24 +81,6 @@ reset these settings.
 This protects the LAN web route. Kubernetes administrators with port-forward
 access and trusted in-cluster callers can still reach internal Services according
 to their RBAC/network permissions; SSO does not change Kubernetes authorization.
-
-## Existing installations with Basic authentication
-
-On reconciliation, Flux changes the existing administration route and prunes
-its old `admin-proxy` Deployment, Service, generated ConfigMap and network policy.
-There can be a brief interruption while Envoy adopts the updated route. Cilium
-and the Hubble workloads are not reinstalled. Verify the direct bootstrap URL:
-
-```bash
-curl --cacert ca.crt -I --resolve hubble.admin.internal:443:192.168.2.153 \
-  https://hubble.admin.internal
-```
-
-Expect HTTP 200 without a Basic authentication challenge. Old
-`administration/admin-credentials` and `/etc/elektro/secrets/{username,password,auth}`
-are no longer used. They were created outside Flux inventories, so they are not
-pruned automatically; the bootstrap script leaves existing copies untouched.
-The CA files remain necessary for HTTPS.
 
 ## References
 

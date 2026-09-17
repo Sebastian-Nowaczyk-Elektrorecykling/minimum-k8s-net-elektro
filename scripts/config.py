@@ -163,6 +163,13 @@ def outputs(c):
             "ConfigMap", "cluster-settings", "flux-system", data=settings),
         "infrastructure/cilium/values.yaml": cilium_values(c),
         "clusters/lan/flux-system/source.yaml": source,
+        "clusters/lan/flux-system/sync.yaml": {
+            "apiVersion": "kustomize.toolkit.fluxcd.io/v1", "kind": "Kustomization",
+            "metadata": {"name": "flux-system", "namespace": "flux-system"},
+            "spec": {"interval": "5m", "path": "./clusters/lan", "prune": True,
+                     "sourceRef": {"kind": "GitRepository", "name": "flux-system"},
+                     # Child resources are ordered with dependsOn.
+                     "wait": False}},
         "clusters/lan/flux-system/kustomization.yaml": k([
             "../../../infrastructure/flux", "source.yaml", "sync.yaml"]),
         "infrastructure/flux/kustomization.yaml": dict(k([

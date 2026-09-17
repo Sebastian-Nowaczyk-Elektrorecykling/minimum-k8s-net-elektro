@@ -8,9 +8,9 @@ import celpy
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("gateway_audit", ROOT / "scripts/check-gateway.py")
-gateway_audit = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(gateway_audit)
+spec = importlib.util.spec_from_file_location("gateway_check", ROOT / "scripts/check-gateway.py")
+gateway_check = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gateway_check)
 spec = importlib.util.spec_from_file_location("validate", ROOT / "scripts/validate.py")
 validate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(validate)
@@ -31,7 +31,7 @@ def route(name, namespace, section):
 
 def snapshot():
     return {
-        "legacy": {"items": []},
+        "ingress": {"items": []},
         "cilium": {"data": {"enable-gateway-api": "true", "gateway-api-hostnetwork-enabled": "true",
                             "gateway-api-hostnetwork-nodelabelselector": "elektro.internal/edge=true"}},
         "class": {"metadata": {"name": "cilium", "generation": 2},
@@ -47,9 +47,9 @@ def snapshot():
     }
 
 
-class GatewayAuditTests(unittest.TestCase):
+class GatewayChecksTests(unittest.TestCase):
     def test_current_gateway_and_routes_pass(self):
-        self.assertEqual(gateway_audit.audit(snapshot(), "192.168.2.153"), [])
+        self.assertEqual(gateway_check.check(snapshot(), "192.168.2.153"), [])
 
     def test_partial_listener_and_stale_routes_fail(self):
         for change in ("listener", "stale", "wrong-parent", "missing-route", "duplicate-edge", "ingress"):
@@ -65,15 +65,15 @@ class GatewayAuditTests(unittest.TestCase):
             elif change == "duplicate-edge":
                 data["edge"]["items"] *= 2
             else:
-                data["legacy"]["items"] = [{"kind": "Ingress", "metadata": {"name": "old-ui", "namespace": "apps"}}]
+                data["ingress"]["items"] = [{"kind": "Ingress", "metadata": {"name": "unsupported-ui", "namespace": "apps"}}]
             with self.subTest(change=change):
-                self.assertTrue(gateway_audit.audit(data, "192.168.2.153"))
+                self.assertTrue(gateway_check.check(data, "192.168.2.153"))
 
-    def test_routing_validation_rejects_legacy_objects_and_annotations(self):
+    def test_routing_validation_rejects_ingress_objects_and_annotations(self):
         for doc in [
-            {"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "legacy"}},
-            {"apiVersion": "networking.k8s.io/v1", "kind": "IngressClass", "metadata": {"name": "legacy"}},
-            {"apiVersion": "gateway.networking.k8s.io/v1beta1", "kind": "Gateway", "metadata": {"name": "old-api"}},
+            {"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "ingress"}},
+            {"apiVersion": "networking.k8s.io/v1", "kind": "IngressClass", "metadata": {"name": "ingress"}},
+            {"apiVersion": "gateway.networking.k8s.io/v1beta1", "kind": "Gateway", "metadata": {"name": "unsupported-api"}},
             {"apiVersion": "v1", "kind": "Service", "metadata": {"name": "app", "annotations": {"kubernetes.io/ingress.class": "nginx"}}},
             {"apiVersion": "cert-manager.io/v1", "kind": "Issuer", "metadata": {"name": "acme"},
              "spec": {"acme": {"solvers": [{"http01": {"ingress": {"class": "nginx"}}}]}}},

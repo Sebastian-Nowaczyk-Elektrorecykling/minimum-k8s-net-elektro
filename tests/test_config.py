@@ -2,6 +2,9 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -118,6 +121,34 @@ class ConfigurationTests(unittest.TestCase):
         c = copy.deepcopy(self.c)
         c["upstream_dns"] = ["8.8.8.8"]
         self.assertNotEqual(revision(c), revision(self.c))
+
+    def test_flux_directory_can_be_recreated_for_another_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            (checkout / "scripts").mkdir()
+            (checkout / "config").mkdir()
+            shutil.copy(ROOT / "scripts/config.py", checkout / "scripts/config.py")
+            settings = checkout / "config/cluster.json"
+            settings.write_text(json.dumps(self.c))
+            command = [sys.executable, str(checkout / "scripts/config.py")]
+            subprocess.run(command + ["generate"], check=True, capture_output=True)
+            flux = checkout / "clusters/lan/flux-system"
+            initial = {p.name: json.loads(p.read_text()) for p in flux.iterdir()}
+            self.assertEqual(set(initial), {"kustomization.yaml", "source.yaml", "sync.yaml"})
+            shutil.rmtree(flux)
+            replacement = dict(self.c, git_url="https://github.com/example/another-cluster.git",
+                               git_branch="production", cluster_name="another")
+            settings.write_text(json.dumps(replacement))
+            subprocess.run(command + ["generate"], check=True, capture_output=True)
+            subprocess.run(command + ["check"], check=True, capture_output=True)
+            recreated = {p.name: json.loads(p.read_text()) for p in flux.iterdir()}
+            self.assertEqual(set(recreated), set(initial))
+            source = recreated["source.yaml"]["spec"]
+            self.assertEqual(source["url"], replacement["git_url"])
+            self.assertEqual(source["ref"], {"branch": "production"})
+            self.assertEqual(recreated["sync.yaml"], initial["sync.yaml"])
+            for resource in recreated["kustomization.yaml"]["resources"]:
+                self.assertTrue((flux / resource).exists(), resource)
 
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ BUILTIN_GROUPS = {
 
 
 def validate_gateway_only(docs):
-    """Reject legacy routing in authored resources and rendered Helm output."""
+    """Reject Ingress routing in authored resources and rendered Helm output."""
     for doc in docs:
         if doc["kind"] in ("Ingress", "IngressClass"):
             raise ValueError(f"Use Gateway API instead of {doc['kind']}: {doc['metadata']['name']}")
@@ -42,7 +42,7 @@ def validate_gateway_only(docs):
         if any(key == "kubernetes.io/ingress.class" or key.startswith((
                 "nginx.ingress.kubernetes.io/", "ingress.cilium.io/",
                 "traefik.ingress.kubernetes.io/")) for key in annotations):
-            raise ValueError(f"Legacy Ingress annotation on {doc['kind']}/{doc['metadata']['name']}")
+            raise ValueError(f"Unsupported Ingress annotation on {doc['kind']}/{doc['metadata']['name']}")
         for solver in doc.get("spec", {}).get("acme", {}).get("solvers", []):
             if "ingress" in solver.get("http01", {}):
                 raise ValueError("ACME HTTP-01 must use Gateway HTTPRoute, not an Ingress solver")

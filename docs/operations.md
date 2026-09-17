@@ -23,8 +23,7 @@ and HelmReleases should become Ready. The Cilium Helm release must be the same
 release created by bootstrap (`helm history cilium -n kube-system`).
 
 Gateway readiness includes every listener's references and the current object
-generation. For legacy Ingress inventory and migration, see
-[Gateway migration](gateway-migration.md).
+generation. See the [Gateway guide](gateway.md) for route configuration and checks.
 
 From a LAN client with `dig` installed, check both DNS transports and private
 AAAA behavior:
@@ -55,12 +54,11 @@ join at least one worker and repeat cross-node traffic tests. The API, DNS and
 gateway all depend on the `.153` node; they do not fail over to DHCP nodes.
 For a configured SSO backend, inspect `hubble-backend` in that backend
 namespace and expect the configured login flow instead of an anonymous 200.
-See [Hubble SSO](hubble-sso.md) for switching the route and upgrading from the
-previous Basic authentication proxy.
+See [Hubble SSO](hubble-sso.md) for connecting an authentication proxy.
 
-## LAN DNS fails with `exec /coredns: operation not permitted`
+## LAN DNS runtime requirements
 
-The upstream CoreDNS image marks `/coredns` with the file capability
+The pinned CoreDNS image marks `/coredns` with the file capability
 `cap_net_bind_service=ep`. Dropping that capability from the container's bounding
 set can make Linux reject execution with EPERM, before the Corefile is read.
 Listening on port 1053 does not avoid this executable-file check. See the
@@ -68,22 +66,9 @@ Listening on port 1053 does not avoid this executable-file check. See the
 and [Linux capability execution checks](https://man7.org/linux/man-pages/man7/capabilities.7.html).
 
 The deployment drops all capabilities and adds back only `NET_BIND_SERVICE`.
-It still runs as UID/GID 65532, with privilege escalation disabled, a read-only
+It runs as UID/GID 65532, with privilege escalation disabled, a read-only
 root filesystem and RuntimeDefault seccomp. CI executes the actual container
 image with these settings as well as testing DNS queries against CoreDNS.
-
-Flux will reconcile the corrected manifest from `main`. If DNS needs immediate
-recovery before reconciliation, apply the same change to the running deployment:
-
-```bash
-sudo k3s kubectl -n lan-system patch deployment lan-dns --type=strategic \
-  -p '{"spec":{"template":{"spec":{"containers":[{"name":"coredns","securityContext":{"capabilities":{"drop":["ALL"],"add":["NET_BIND_SERVICE"]}}}]}}}'
-sudo k3s kubectl -n lan-system rollout status deployment/lan-dns --timeout=180s
-```
-
-This rolls the DNS pod. Ensure Flux has fetched the fixed Git revision so it
-does not restore the old security context. No host security policy changes are
-needed for this image/manifest mismatch.
 
 ## Cilium observability
 
@@ -132,8 +117,7 @@ node, so restrict web ports to the intended LAN with your firewall.
 
 Host preparation persists and loads VXLAN and the `xt_socket`, `xt_TPROXY`,
 `xt_mark`, `xt_CT` kernel modules needed by the configured Cilium proxy path.
-On an existing host, rerun preparation during maintenance to install this
-policy. Custom kernels must supply equivalent built-in/module support.
+Custom kernels must supply equivalent built-in/module support.
 
 | Traffic | Protocol/port | Sources and destinations |
 | --- | --- | --- |
@@ -322,10 +306,10 @@ BPF state. `/var/lib/longhorn`, host packages and host preparation are retained.
 Review and erase retained storage separately only after its contents are no
 longer needed. Do not use the k3s uninstaller directly on an active cluster node.
 
-The node owning `api_ip` cannot be routinely removed until you migrate the
-shared API/DNS/gateway endpoint. To dismantle an entire cluster, remove all other nodes, evacuate all
-storage, and back up the final server's etcd snapshot and token **off-host**.
-Only then use the explicit final-node mode:
+The node owning `api_ip` cannot be routinely removed until you move the
+shared API/DNS/gateway endpoint. For a cluster with exactly one remaining server
+and no other nodes, evacuate storage and back up its etcd snapshot and token
+**off-host** before using the explicit final-node mode:
 
 ```bash
 sudo ETCD_BACKUP_CONFIRMED=yes ./scripts/remove-node.sh \
@@ -334,6 +318,11 @@ sudo ETCD_BACKUP_CONFIRMED=yes ./scripts/remove-node.sh \
 
 This destroys the last k3s server and its local cluster state. It does not
 delete retained Longhorn files or the external backups.
+
+Routine server removal deliberately stops at the etcd quorum guard; it cannot
+shrink a multi-server cluster all the way to one node. For a complete rebuild,
+follow [Retire the cluster](reusing-repository.md#retire-the-cluster) rather than
+bypassing that guard.
 
 ## Backups, configuration and upgrades
 
@@ -352,11 +341,11 @@ it does not modify already installed host settings. For k3s upgrades, review
 the supported minor upgrade path, snapshot etcd, and upgrade/drain one server at
 a time, then workers. The node scripts reject changes to existing generated
 node configuration and reject role conversion. For intentional server-flag or
-IP changes, use a planned migration of `/etc/rancher/k3s/config.yaml` on every
+IP changes, plan coordinated updates to `/etc/rancher/k3s/config.yaml` on every
 server. Match critical k3s flags across servers. Do not change pod/service CIDRs
-in place; rebuild/migrate the cluster.
+in place; rebuild the cluster with the required addressing.
 
-For an edge endpoint migration, plan a maintenance window: `.153` owns the API,
+To move the edge endpoint, plan a maintenance window: `.153` owns the API,
 DNS and gateway together. Back up etcd, tokens, CA and workload secrets. Arrange the
 replacement host/address, add the required API SANs on all servers, and verify
 API access before updating Git's `api_ip`, Cilium values, join endpoints,
@@ -364,7 +353,7 @@ kubeconfigs, router DNS forwarding and host address-discovery settings. Move
 `elektro.internal/edge=true` to the replacement and remove it from the old host;
 never assign the same LAN IP to two live hosts. Reconcile DNS hostIP and gateway
 selection, verify LAN acceptance checks, then remove the retired node. This is a
-coordinated migration, not a routine removal command. If retaining `.153` on new
+coordinated operation, not a routine removal command. If retaining `.153` on new
 hardware, transfer the address only after the original host has released it.
 
 For private Git repositories, create a Flux Git authentication Secret outside

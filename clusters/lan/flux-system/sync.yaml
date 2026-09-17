@@ -1,14 +1,18 @@
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
-metadata:
-  name: flux-system
-  namespace: flux-system
-spec:
-  interval: 5m
-  path: ./clusters/lan
-  prune: true
-  sourceRef:
-    kind: GitRepository
-    name: flux-system
-  # Child resources are ordered with dependsOn; do not wait on every child here.
-  wait: false
+{
+  "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+  "kind": "Kustomization",
+  "metadata": {
+    "name": "flux-system",
+    "namespace": "flux-system"
+  },
+  "spec": {
+    "interval": "5m",
+    "path": "./clusters/lan",
+    "prune": true,
+    "sourceRef": {
+      "kind": "GitRepository",
+      "name": "flux-system"
+    },
+    "wait": false
+  }
+}

@@ -24,8 +24,12 @@ its gateway backend can be switched to an SSO proxy later.
 
 HTTP/HTTPS routing uses **Gateway API v1**. Cilium Ingress, Hubble Ingress and
 cert-manager ingress-shim are explicitly disabled. See the
-[Gateway migration guide](docs/gateway-migration.md) and
-[repository audit](docs/audit-2026-09-17.md) for findings and rollout checks.
+[Gateway guide](docs/gateway.md) for routes and readiness checks.
+
+For a replacement cluster or a copy at a different Git URL, follow
+[Reusing this repository](docs/reusing-repository.md). It covers retiring the
+old cluster, preserving manifests, regenerating `clusters/lan/flux-system`,
+and publishing a clean repository with its own history.
 
 ## Configure and bootstrap
 
@@ -47,8 +51,8 @@ python3 scripts/config.py check
 ```
 
 Bootstrap requires a clean checkout at the same commit as the configured remote
-branch, which defaults to `main`. Merge any setup PR before running it. This
-ensures Flux adopts exactly the configuration used to create the cluster.
+branch, which defaults to `main`. Commit and push configuration before running
+bootstrap so Flux adopts exactly the configuration used to create the cluster.
 
 On the `.153` host, replace `eno1` with its actual LAN interface:
 
@@ -104,7 +108,7 @@ address change while a node is running requires a controlled k3s restart; see
 | `install-controller.sh --bootstrap` | First dedicated controller; follow with `bootstrap-cluster.sh` |
 | `prepare-host.sh` | Host prerequisites only |
 | `configure-power.sh` | Apply the node power policy without reinstalling k3s |
-| `check-gateway.sh` | Read-only Gateway readiness and legacy Ingress audit |
+| `check-gateway.sh` | Read-only Gateway API readiness and routing checks |
 | `remove-node.sh` | Safety checks, drain, cluster removal and remote uninstall |
 
 Dedicated controllers retain kubelet/Cilium. Add two more servers for a
@@ -161,8 +165,7 @@ proxy's Service:
 
 Regenerate and commit the configuration to switch the existing route. Hubble
 itself stays in the Cilium release. [docs/hubble-sso.md](docs/hubble-sso.md)
-describes the ownership split, proxy requirements and transition from an
-existing password-protected installation.
+describes resource ownership, proxy requirements and how to connect SSO.
 
 ## Applications, storage and GPUs
 

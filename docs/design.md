@@ -52,11 +52,14 @@ paths from Git cannot silently uninstall networking or the CA; decommission
 them deliberately. Other workload targets prune normally. Bootstrap-created
 CA Secrets are outside Flux inventories and need separate backups.
 
-`config.py generate` writes cluster settings, Cilium values, Git source and
-pinned remote references. Flux substitutes settings into the other manifests.
+`config.py generate` writes cluster settings, Cilium values, all three files in
+`clusters/lan/flux-system`, and pinned remote references. The Flux directory can
+be recreated from `config/cluster.json`; it contains no cluster identity or
+credentials. See [Reusing this repository](reusing-repository.md).
+Flux substitutes settings into the other manifests.
 `CONFIG_REVISION` rolls DNS Pods when settings change. Host
-settings are not reconciled by Flux. Changing IPs or server flags is a planned
-migration, and Pod/Service CIDR changes require rebuilding/migrating the cluster.
+settings are not reconciled by Flux. Changing IPs or server flags requires
+coordinated host updates, and Pod/Service CIDR changes require a cluster rebuild.
 
 HTTPS terminates at Envoy. Separate application/administration listeners use
 hostname and namespace selectors. During bootstrap, the administration route

@@ -12,14 +12,14 @@ def current_conditions(obj, conditions, required):
                for name in required)
 
 
-def audit(snapshot, api_ip):
+def check(snapshot, api_ip):
     errors = []
-    for obj in snapshot["legacy"]["items"]:
+    for obj in snapshot["ingress"]["items"]:
         m = obj["metadata"]
-        errors.append(f"Legacy {obj['kind']}: {m.get('namespace', '-')}/{m['name']}; migrate its owning repository/release")
+        errors.append(f"Unsupported {obj['kind']}: {m.get('namespace', '-')}/{m['name']}; configure an HTTPRoute in its owning repository/release")
     data = snapshot["cilium"].get("data", {})
     if data.get("enable-ingress-controller", "false") != "false":
-        errors.append("Cilium Ingress controller is still enabled")
+        errors.append("Cilium Ingress controller must be disabled")
     for flag in ("enable-gateway-api", "gateway-api-hostnetwork-enabled"):
         if data.get(flag) != "true":
             errors.append(f"Cilium {flag} is not true")
@@ -68,11 +68,11 @@ def main():
     parser.add_argument("--api-ip", required=True)
     args = parser.parse_args()
     snapshot = {name: json.loads((args.snapshot / f"{name}.json").read_text())
-                for name in ("legacy", "cilium", "class", "gateway", "routes", "edge")}
-    errors = audit(snapshot, args.api_ip)
+                for name in ("ingress", "cilium", "class", "gateway", "routes", "edge")}
+    errors = check(snapshot, args.api_ip)
     if errors:
-        raise SystemExit("Gateway audit failed:\n- " + "\n- ".join(errors))
-    print("Gateway audit passed: Gateway API only, current route/listener conditions, one static edge node.")
+        raise SystemExit("Gateway checks failed:\n- " + "\n- ".join(errors))
+    print("Gateway checks passed: Gateway API only, current route/listener conditions, one static edge node.")
 
 
 if __name__ == "__main__":
