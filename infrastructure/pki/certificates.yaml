@@ -23,4 +23,6 @@ spec:
     - ${DOMAIN}
     - '*.${DOMAIN}'
     - '*.${ADMIN_DOMAIN}'
+    - '*.${TESTING_DOMAIN}'
+    - '*.${STAGING_DOMAIN}'
   issuerRef: {name: internal-ca, kind: ClusterIssuer}

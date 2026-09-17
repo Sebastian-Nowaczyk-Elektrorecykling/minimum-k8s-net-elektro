@@ -79,11 +79,14 @@ class DNSTests(unittest.TestCase):
         self.assertTrue(fields[1] & 0x0400, "Private suffix must be authoritative")
         return fields, result
 
-    def test_udp_application_and_admin_wildcards(self):
-        for prefix in ("application", "hubble.admin"):
-            fields, data = self.query(prefix + "." + self.settings["DOMAIN"])
-            self.assertEqual(fields[3], 1)
-            self.assertIn(socket.inet_aton(self.settings["API_IP"]), data)
+    def test_application_admin_and_environment_names_over_udp_and_tcp(self):
+        for prefix in ("application", "hubble.admin", "testing", "application.testing",
+                       "staging", "application.staging"):
+            for tcp in (False, True):
+                with self.subTest(prefix=prefix, tcp=tcp):
+                    fields, data = self.query(prefix + "." + self.settings["DOMAIN"], tcp=tcp)
+                    self.assertEqual(fields[3], 1)
+                    self.assertIn(socket.inet_aton(self.settings["API_IP"]), data)
 
     def test_tcp_api_address(self):
         fields, data = self.query("api." + self.settings["DOMAIN"], tcp=True)
@@ -91,8 +94,12 @@ class DNSTests(unittest.TestCase):
         self.assertIn(socket.inet_aton(self.settings["API_IP"]), data)
 
     def test_aaaa_is_empty_and_authoritative(self):
-        fields, _ = self.query("application." + self.settings["DOMAIN"], qtype=28)
-        self.assertEqual(fields[3], 0)
+        for prefix in ("application", "hubble.admin", "testing", "application.testing",
+                       "staging", "application.staging"):
+            for tcp in (False, True):
+                with self.subTest(prefix=prefix, tcp=tcp):
+                    fields, _ = self.query(prefix + "." + self.settings["DOMAIN"], qtype=28, tcp=tcp)
+                    self.assertEqual(fields[3], 0)
 
 
 if __name__ == "__main__":

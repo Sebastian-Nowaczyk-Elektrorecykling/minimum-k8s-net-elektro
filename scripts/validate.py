@@ -79,6 +79,32 @@ def validate_hubble_route(docs, c):
         "to": [{"group": "", "kind": "Service", "name": c["hubble_backend_service"]}]}
 
 
+def validate_gateway_domains(docs, c):
+    gateway = next(d for d in docs if d["kind"] == "Gateway")
+    assert "addresses" not in gateway["spec"], "Host-network gateway must not request a VIP"
+    listeners = {listener["name"]: listener for listener in gateway["spec"]["listeners"]}
+    domains = {"apps-https": c["domain"], "admin-https": f"admin.{c['domain']}",
+               "testing-https": f"testing.{c['domain']}", "staging-https": f"staging.{c['domain']}"}
+    certificate = next(d for d in docs if d["kind"] == "Certificate" and
+                       d["metadata"]["name"] == "internal-wildcard")
+    assert certificate["spec"]["secretName"] == "internal-wildcard-tls"
+    for name, domain in domains.items():
+        listener = listeners[name]
+        assert listener["hostname"] == f"*.{domain}"
+        assert listener["port"] == 443 and listener["protocol"] == "HTTPS"
+        assert listener["tls"]["mode"] == "Terminate"
+        assert listener["tls"]["certificateRefs"] == [{"kind": "Secret", "name": "internal-wildcard-tls"}]
+        assert f"*.{domain}" in certificate["spec"]["dnsNames"], f"Missing TLS coverage for {domain}"
+        scope = "administration" if name == "admin-https" else "applications"
+        assert listener["allowedRoutes"]["namespaces"] == {
+            "from": "Selector", "selector": {"matchLabels": {"elektro.internal/route-scope": scope}}}
+    # Gateway HTTP hostname wildcards include multiple labels, so the shared
+    # redirect covers the administration, testing and staging subdomains too.
+    assert listeners["http"]["hostname"] == f"*.{c['domain']}"
+    redirect = next(d for d in docs if d["kind"] == "HTTPRoute" and d["metadata"]["name"] == "redirect-https")
+    assert redirect["spec"]["hostnames"] == [f"*.{c['domain']}"]
+
+
 def main():
     run(sys.executable, "scripts/config.py", "check")
     c = config.load()
@@ -156,11 +182,14 @@ def main():
     assert all(p["hostIP"] == c["api_ip"] and p["hostPort"] == 53 for p in dns_ports)
     assert not any(d["kind"] in ("CiliumLoadBalancerIPPool", "CiliumL2AnnouncementPolicy") or
                    (d["kind"] == "Service" and d["spec"].get("type") == "LoadBalancer") for d in all_docs)
-    gateway = next(d for d in all_docs if d["kind"] == "Gateway")
-    assert "addresses" not in gateway["spec"], "Host-network gateway must not request a VIP"
-    for listener in gateway["spec"]["listeners"]:
-        if listener["protocol"] == "HTTPS":
-            assert listener["tls"]["certificateRefs"][0]["name"] == "internal-wildcard-tls"
+    validate_gateway_domains(all_docs, c)
+    renamed = dict(c, domain="example.test")
+    renamed_settings = config.outputs(renamed)["clusters/lan/cluster-settings.yaml"]["data"]
+    renamed_docs = []
+    for path in ("infrastructure/gateway/gateway.yaml", "infrastructure/pki/certificates.yaml"):
+        renamed_docs.extend(yaml.safe_load_all(substitute((ROOT / path).read_text(), renamed_settings)))
+    validate_gateway_domains(renamed_docs, renamed)
+    print("Validated application, admin, testing and staging HTTPS domains with a configurable base domain")
     charts = [("cilium", "kube-system", "https://helm.cilium.io", c["cilium_version"]),
               ("cert-manager", "cert-manager", "https://charts.jetstack.io", c["cert_manager_version"])]
     chart_dir = os.environ.get("CHART_DIR")

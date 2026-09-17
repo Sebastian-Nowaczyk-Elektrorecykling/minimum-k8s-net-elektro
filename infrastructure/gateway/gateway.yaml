@@ -36,6 +36,30 @@ spec:
           from: Selector
           selector:
             matchLabels: {elektro.internal/route-scope: administration}
+    - name: testing-https
+      hostname: '*.${TESTING_DOMAIN}'
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs: [{kind: Secret, name: internal-wildcard-tls}]
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels: {elektro.internal/route-scope: applications}
+    - name: staging-https
+      hostname: '*.${STAGING_DOMAIN}'
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs: [{kind: Secret, name: internal-wildcard-tls}]
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels: {elektro.internal/route-scope: applications}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

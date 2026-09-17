@@ -3,7 +3,7 @@
 ```mermaid
 flowchart TD
   LAN[LAN clients] --> DNS["192.168.2.153:53"]
-  DNS --> Names["*.internal → 192.168.2.153"]
+  DNS --> Names["Private names → 192.168.2.153"]
   LAN --> API["192.168.2.153:6443"]
   API --> K3s[k3s control plane]
   LAN --> Gateway["192.168.2.153:80/443"]
@@ -61,8 +61,10 @@ Flux substitutes settings into the other manifests.
 settings are not reconciled by Flux. Changing IPs or server flags requires
 coordinated host updates, and Pod/Service CIDR changes require a cluster rebuild.
 
-HTTPS terminates at Envoy. Separate application/administration listeners use
-hostname and namespace selectors. During bootstrap, the administration route
+HTTPS terminates at Envoy. Application, testing, staging and administration
+listeners use hostname and namespace selectors, with certificate coverage for
+each wildcard suffix. Testing and staging share the application namespace
+selector. During bootstrap, the administration route
 forwards directly to the `hubble-ui` Service without authentication. A narrowly
 scoped ReferenceGrant allows the cross-namespace Service reference. Three
 configuration fields select this backend; later they can point to an SSO proxy

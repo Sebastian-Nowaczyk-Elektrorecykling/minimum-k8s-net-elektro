@@ -1,4 +1,6 @@
 # Copy into apps/ and add to apps/kustomization.yaml to deploy the smoke test.
+# For testing, use listener testing-https and hostname whoami.${TESTING_DOMAIN}.
+# For staging, use listener staging-https and hostname whoami.${STAGING_DOMAIN}.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

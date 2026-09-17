@@ -182,6 +182,8 @@ for the fields required by your Git transport.
 The labels and resource names under `elektro.internal` are a stable internal
 contract. Keep them when changing `cluster_name` or the user-facing DNS domain.
 Adjust any hardcoded hostnames in your own applications and examples yourself.
+The administration, testing and staging suffixes follow the configured `domain`
+automatically, including DNS, Gateway listeners and the private TLS certificate.
 
 If both clusters will run on the same LAN, give the new cluster a distinct
 static `api_ip` and DNS domain, and configure separate conditional forwarding.

@@ -30,6 +30,7 @@ def route(name, namespace, section):
 
 
 def snapshot():
+    listeners = ("http", "apps-https", "admin-https", "testing-https", "staging-https")
     return {
         "ingress": {"items": []},
         "cilium": {"data": {"enable-gateway-api": "true", "gateway-api-hostnetwork-enabled": "true",
@@ -37,10 +38,10 @@ def snapshot():
         "class": {"metadata": {"name": "cilium", "generation": 2},
                   "status": {"conditions": conditions("Accepted")}},
         "gateway": {"metadata": {"name": "internal", "namespace": "gateway-system", "generation": 2},
-                    "spec": {"listeners": [{"name": n} for n in ("http", "apps-https", "admin-https")]},
+                    "spec": {"listeners": [{"name": n} for n in listeners]},
                     "status": {"conditions": conditions("Accepted", "Programmed"), "listeners": [
                         {"name": n, "conditions": conditions("Accepted", "Programmed", "ResolvedRefs")}
-                        for n in ("http", "apps-https", "admin-https")]}},
+                        for n in listeners]}},
         "routes": {"items": [route("redirect-https", "gateway-system", "http"),
                              route("administration", "administration", "admin-https")]},
         "edge": {"items": [{"status": {"addresses": [{"type": "InternalIP", "address": "192.168.2.153"}]}}]},
@@ -122,10 +123,13 @@ class GatewayHealthExpressionTests(unittest.TestCase):
                     self.assertFalse(self.healthy(kind, obj))
 
     def test_one_failed_listener_or_backend_blocks_readiness(self):
-        data = snapshot()
-        data["gateway"]["status"]["listeners"][2]["conditions"][2]["status"] = "False"
-        self.assertFalse(self.healthy("Gateway", data["gateway"]))
-        route = data["routes"]["items"][1]
+        for listener in range(len(snapshot()["gateway"]["spec"]["listeners"])):
+            data = snapshot()
+            data["gateway"]["status"]["listeners"][listener]["conditions"][2]["status"] = "False"
+            with self.subTest(listener=listener):
+                self.assertFalse(self.healthy("Gateway", data["gateway"]))
+                self.assertTrue(gateway_check.check(data, "192.168.2.153"))
+        route = snapshot()["routes"]["items"][1]
         route["status"]["parents"][0]["conditions"][1]["status"] = "False"
         self.assertFalse(self.healthy("HTTPRoute", route))
 

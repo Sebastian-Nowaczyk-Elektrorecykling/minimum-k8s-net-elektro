@@ -15,6 +15,8 @@ Use [the whoami example](../examples/whoami.yaml) as the HTTPRoute pattern:
 | Concern | Configuration |
 | --- | --- |
 | User application | Namespace label `elektro.internal/route-scope: applications`; parent listener `apps-https`; hostname such as `app.internal` |
+| Testing application | Namespace label `elektro.internal/route-scope: applications`; parent listener `testing-https`; hostname such as `app.testing.internal` |
+| Staging application | Namespace label `elektro.internal/route-scope: applications`; parent listener `staging-https`; hostname such as `app.staging.internal` |
 | Administration tool | Namespace label `elektro.internal/route-scope: administration`; parent listener `admin-https`; hostname such as `tool.admin.internal` |
 | Gateway parent | `name: internal`, `namespace: gateway-system`, explicit `sectionName` |
 | Service backend | `backendRefs` with the Service name and **Service port**, not container port |
@@ -23,9 +25,35 @@ Use [the whoami example](../examples/whoami.yaml) as the HTTPRoute pattern:
 | HTTP redirect | Shared `redirect-https` HTTPRoute on port 80 |
 | Authentication | An SSO proxy backend as described in [Hubble SSO](hubble-sso.md) |
 
-Keep application hostnames to one label below `internal`, and admin hostnames
-to one label below `admin.internal`: wildcard certificate matching only covers
-one label. Substitute your configured domain if it differs from the default.
+Keep hostnames to one label below their chosen suffix: `internal`,
+`admin.internal`, `testing.internal` or `staging.internal`. The gateway
+certificate includes a separate wildcard for each suffix because certificate
+wildcards only cover one label. The generated `DOMAIN`, `ADMIN_DOMAIN`,
+`TESTING_DOMAIN` and `STAGING_DOMAIN` settings all follow `domain` in
+`config/cluster.json`; changing it to `example.test` gives `testing.example.test`
+and `staging.example.test` automatically.
+
+For a testing application Service named `my-app` exposing port 80 in a namespace
+labelled `elektro.internal/route-scope: applications`, use this HTTPRoute spec:
+
+```yaml
+spec:
+  parentRefs:
+    - name: internal
+      namespace: gateway-system
+      sectionName: testing-https
+  hostnames: ['my-app.${TESTING_DOMAIN}']
+  rules:
+    - backendRefs: [{name: my-app, port: 80}]
+```
+
+Use `staging-https` and `${STAGING_DOMAIN}` for staging. Select the corresponding
+listener explicitly, since it takes precedence over the broader `apps-https`
+hostname. Flux substitutes these variables for this repository's targets;
+another repository must supply its own substitution settings or use the actual
+hostnames. DNS suffixes do not create application deployments or isolate their
+data; choose namespaces, releases and policies for each workload as needed.
+
 Disable `ingress.enabled` in application Helm charts and create an HTTPRoute
 in the application's owning repository. Configure redirects, rewrites and
 headers with Gateway API filters supported by the pinned Cilium version.
@@ -34,6 +62,8 @@ The shared Gateway owns host ports 80/443 on the edge node. Attach additional
 HTTPRoutes to its listeners; a second Gateway on those ports would conflict.
 DNS directs private names to the edge address, but a Service and HTTPRoute
 must exist before an application can answer requests.
+The existing HTTP redirect and LAN forwarding rule for `internal` cover all
+four suffixes. No additional LAN address or router forwarding rule is needed.
 
 ## Verify routing
 
@@ -55,6 +85,8 @@ Then test DNS and HTTP from a LAN client, using the public CA certificate:
 
 ```bash
 dig @192.168.2.153 hubble.admin.internal A +short
+dig @192.168.2.153 app.testing.internal A +short
+dig @192.168.2.153 app.staging.internal A +short
 curl --cacert ca.crt --resolve hubble.admin.internal:443:192.168.2.153 \
   https://hubble.admin.internal/
 curl -I --resolve hubble.admin.internal:80:192.168.2.153 \
@@ -86,3 +118,6 @@ version. Deleting a CRD deletes its resources.
 See [Cilium Gateway API](https://docs.cilium.io/en/stable/network/servicemesh/gateway-api/gateway-api/)
 and [Gateway API reference permissions](https://gateway-api.sigs.k8s.io/api-types/referencegrant/)
 for supported routing and cross-namespace references.
+The [Gateway hostname rules](https://gateway-api.sigs.k8s.io/docs/concepts/hostnames/)
+explain listener precedence and the difference between routing and certificate
+wildcards.

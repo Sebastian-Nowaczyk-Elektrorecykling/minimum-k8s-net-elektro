@@ -13,6 +13,8 @@ controllers, workers and hybrids can use DHCP.
 | HTTP / HTTPS gateway | `192.168.2.153:80` / `:443` |
 | Application names | `*.internal` → `192.168.2.153` |
 | Administration names | `*.admin.internal` → `192.168.2.153` |
+| Testing application names | `*.testing.internal` → `192.168.2.153` |
+| Staging application names | `*.staging.internal` → `192.168.2.153` |
 | Pod / Service networks | `10.42.0.0/16` / `10.43.0.0/16` |
 
 Cilium includes Hubble UI/Relay, flow metrics, agent/operator/Envoy metrics and
@@ -135,7 +137,7 @@ Avoid an upstream resolver that forwards all queries back to this cluster.
 
 Cluster CoreDNS forwards `.internal` to the dedicated DNS Service; Kubernetes
 `cluster.local` keeps its usual meaning. All private A records, including
-`api.internal`, `ns.internal` and both wildcard families, answer `.153`. IPv6
+`api.internal`, `ns.internal` and all four wildcard families, answer `.153`. IPv6
 queries for these IPv4-only names receive authoritative empty answers. DNS
 alone does not deploy an application; each application also needs an HTTPRoute.
 The gateway handles HTTP/HTTPS, not LAN default routing or NAT.
@@ -148,7 +150,8 @@ sudo install -m 0644 ca.crt /usr/local/share/ca-certificates/elektro.crt
 sudo update-ca-certificates
 ```
 
-Cert-manager renews the `*.internal` and `*.admin.internal` gateway certificate.
+Cert-manager renews the gateway certificate covering `*.internal`,
+`*.admin.internal`, `*.testing.internal` and `*.staging.internal`.
 Browsers with independent trust stores may need an import too. Back up the CA
 key securely; never distribute it or commit it.
 
@@ -176,6 +179,10 @@ Add application manifests to `apps/` and `apps/kustomization.yaml`. Application
 namespaces carry `elektro.internal/route-scope: applications`; administration
 namespaces use `administration`. [examples/whoami.yaml](examples/whoami.yaml)
 provides an opt-in application and HTTPRoute at `https://whoami.internal`.
+Testing and staging routes use the same application namespace label, with
+`sectionName: testing-https` or `staging-https` and a hostname such as
+`app.testing.internal` or `app.staging.internal`. All suffixes follow `domain`
+in `config/cluster.json`. See the [Gateway guide](docs/gateway.md) for examples.
 
 Host preparation installs Longhorn V1 prerequisites: iSCSI, NFS clients,
 cryptsetup, dmsetup and filesystem utilities. It loads required modules and
