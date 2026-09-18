@@ -90,10 +90,7 @@ fi
 case "$gpu" in
   nvidia)
     [[ $(arch) == amd64 ]] || die 'Debian packaged NVIDIA driver path is amd64; provision an appropriate ARM driver manually and use GPU_VENDOR=none.'
-    # NVIDIA_DRIVER_PACKAGE allows a hardware-appropriate Debian driver, e.g.
-    # nvidia-open-kernel-dkms where supported. Do not install a host CUDA SDK.
-    apt-get install -y --no-install-recommends "linux-headers-$(uname -r)" \
-      "${NVIDIA_DRIVER_PACKAGE:-nvidia-driver}" firmware-misc-nonfree
+    install_nvidia_driver
     tmp=$(mktemp -d)
     download https://nvidia.github.io/libnvidia-container/gpgkey "$tmp/key"
     gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg "$tmp/key"
@@ -109,9 +106,7 @@ case "$gpu" in
       "libnvidia-container1=$NVIDIA_TOOLKIT_VERSION"
     # K3s detects /usr/bin/nvidia-container-runtime itself; never write to a
     # standalone /etc/containerd/config.toml or install another containerd.
-    if ! nvidia-smi >/dev/null 2>&1; then
-      die 'NVIDIA packages installed. Reboot, enroll the DKMS MOK if Secure Boot requires it, verify nvidia-smi, then rerun this script.'
-    fi
+    check_nvidia_driver
     ;;
   amd)
     apt-get install -y --no-install-recommends firmware-amd-graphics

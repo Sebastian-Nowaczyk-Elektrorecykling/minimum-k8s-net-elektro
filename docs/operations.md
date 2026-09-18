@@ -242,11 +242,20 @@ devices. For mixed-vendor compute hosts, run `prepare-host.sh` explicitly for
 each needed vendor before joining, then use `--skip-host-preparation`.
 
 For NVIDIA, `nvidia-smi` must succeed before k3s starts. The script installs the
-Debian driver and matching running-kernel headers, then the pinned NVIDIA
-Container Toolkit. An unavailable `linux-headers-$(uname -r)` package means you
+Debian driver, matching running-kernel headers, `nvidia-smi` and `libcuda1`, then
+the pinned NVIDIA Container Toolkit. Debian supplies the SMI command and the
+CUDA driver library as separate packages, so they are requested explicitly even
+with `--no-install-recommends`. The host driver library is required by GPU
+containers; the CUDA SDK and application libraries belong in workload images.
+An unavailable `linux-headers-$(uname -r)` package means you
 should update/reboot into an available Debian kernel first. Secure Boot may
 require enrolling the Debian DKMS MOK and rebooting. Older/newer GPUs may need a
 different supported driver; `NVIDIA_DRIVER_PACKAGE` selects a Debian package.
+For a different Debian driver branch, set `NVIDIA_SMI_PACKAGE` and
+`NVIDIA_CUDA_PACKAGE` to its matching packages too; their defaults are
+`nvidia-smi` and `libcuda1`. An open kernel module from the same driver branch
+uses the same userspace packages. Select packages for the GPU model rather
+than switching driver branches in response to a generic installation error.
 The automated proprietary NVIDIA driver path is amd64 only. On ARM/SBSA/Jetson,
 provision the platform-supported driver/runtime separately and use
 `GPU_VENDOR=none` to preserve it.
@@ -269,6 +278,39 @@ setup. AMD needs an appropriately supported GPU with `/dev/kfd` and `/dev/dri`;
 Intel uses `/dev/dri`. Their userspace application runtimes belong in container
 images. Firmware installation alone cannot make unsupported hardware support a
 compute runtime.
+
+### NVIDIA readiness
+
+APT reporting zero new packages means the requested packages are installed.
+The count of packages not upgraded is not a driver health result. Installation
+continues only when `nvidia-smi` succeeds; a missing command is reported
+separately from a command that runs and fails to communicate with the driver.
+
+Run the same read-only check independently on the GPU host:
+
+```bash
+sudo ./scripts/check-nvidia.sh
+```
+
+On failure it prints the original SMI error, running kernel, PCI device IDs and
+active drivers, DKMS status, loaded modules, module lookup and matching kernel
+messages. It does not reinstall packages, rebuild modules or change GPU bindings.
+
+| Evidence | Next step |
+| --- | --- |
+| `nvidia-smi` command missing | Install the matching SMI package or rerun host preparation; a reboot does not install it |
+| Module not found for the running kernel, or DKMS not installed for it | Check matching kernel headers and the NVIDIA DKMS build log under `/var/lib/dkms`; resolve the build error before retrying |
+| Nouveau still owns the GPU | Verify the Debian driver package's blacklist/initramfs configuration and reboot after it is applied; do not unload the active display driver during setup |
+| Driver/library version mismatch | Check that userspace packages match the installed kernel module; reboot if an older module remains loaded after an upgrade |
+| Signature rejection or lockdown in the kernel log | Check the actual Secure Boot state and enroll the DKMS signing key when required |
+| Unsupported GPU, no devices, or GPU bound to another driver such as `vfio-pci` | Use the PCI ID and kernel error to select a supported driver and intended device binding |
+
+If the cause remains unclear, retain this output before making changes. Do not
+use `GPU_VENDOR=none` to treat a failing GPU as ready. See Debian's
+[`nvidia-driver`](https://packages.debian.org/trixie/nvidia-driver),
+[`nvidia-smi`](https://packages.debian.org/trixie/nvidia-smi) and
+[`libcuda1`](https://packages.debian.org/trixie/libcuda1) package definitions for
+their roles and dependencies.
 
 ## Node removal
 

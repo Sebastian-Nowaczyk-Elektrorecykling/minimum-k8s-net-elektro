@@ -114,6 +114,7 @@ address change while a node is running requires a controlled k3s restart; see
 | `prepare-host.sh` | Host prerequisites only |
 | `configure-power.sh` | Apply the node power policy without reinstalling k3s |
 | `check-gateway.sh` | Read-only Gateway API readiness and routing checks |
+| `check-nvidia.sh` | Read-only NVIDIA readiness and kernel/driver diagnostics |
 | `remove-node.sh` | Safety checks, drain, cluster removal and remote uninstall |
 
 Dedicated controllers retain kubelet/Cilium. Add two more servers for a
@@ -186,8 +187,11 @@ in `config/cluster.json`. See the [Gateway guide](docs/gateway.md) for examples.
 
 Host preparation installs Longhorn V1 prerequisites: iSCSI, NFS clients,
 cryptsetup, dmsetup and filesystem utilities. It loads required modules and
-starts iscsid, without formatting disks. NVIDIA hosts get a Debian driver and
-NVIDIA Container Toolkit; k3s discovers the runtime in its bundled containerd.
+starts iscsid, without formatting disks. NVIDIA hosts get a Debian driver,
+`nvidia-smi`, the host CUDA driver library and NVIDIA Container Toolkit; k3s
+discovers the runtime in its bundled containerd. A failed NVIDIA readiness
+check prints the actual error and diagnostics; run `sudo ./scripts/check-nvidia.sh`
+to inspect it independently. The CUDA SDK and workload libraries belong in images.
 AMD/Intel hosts get firmware for their kernel drivers. Userspace compute/media
 libraries belong in workload images.
 
