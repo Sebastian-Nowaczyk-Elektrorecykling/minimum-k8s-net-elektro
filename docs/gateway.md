@@ -1,7 +1,7 @@
 # Gateway API
 
 Cilium serves HTTP/HTTPS through Gateway API. The GatewayClass, Gateway,
-HTTPRoutes and ReferenceGrant use `gateway.networking.k8s.io/v1`. All LAN web
+HTTPRoutes and optional ReferenceGrants use `gateway.networking.k8s.io/v1`. All LAN web
 traffic enters through `api_ip`, which defaults to `192.168.2.153`.
 
 Cilium's Ingress controller and Hubble's chart-generated Ingress are disabled.
@@ -23,7 +23,6 @@ Use [the whoami example](../examples/whoami.yaml) as the HTTPRoute pattern:
 | Cross-namespace backend | A narrowly scoped ReferenceGrant in the backend namespace |
 | HTTPS certificate | Gateway's `internal-wildcard-tls` Secret, renewed by the explicit Certificate |
 | HTTP redirect | Shared `redirect-https` HTTPRoute on port 80 |
-| Authentication | An SSO proxy backend as described in [Hubble SSO](hubble-sso.md) |
 
 Keep hostnames to one label below their chosen suffix: `internal`,
 `admin.internal`, `testing.internal` or `staging.internal`. The gateway
@@ -81,7 +80,9 @@ runs the same check after Flux is ready. Flux uses CEL health checks for
 GatewayClass, Gateway and HTTPRoute that require current-generation conditions
 and valid references.
 
-Then test DNS and HTTP from a LAN client, using the public CA certificate:
+For an end-to-end Hubble test, first run `sudo ./scripts/hubble-route.py add`
+on a k3s server. Then test DNS and HTTP from a LAN client, using the public CA
+certificate:
 
 ```bash
 dig @192.168.2.153 hubble.admin.internal A +short
@@ -93,9 +94,11 @@ curl -I --resolve hubble.admin.internal:80:192.168.2.153 \
   http://hubble.admin.internal/
 ```
 
-Expect the Hubble UI (or your configured SSO flow) over HTTPS and an HTTPS
-redirect over HTTP. Repeat with each application's hostname. API status checks
-do not prove backend availability, certificate trust or end-to-end connectivity.
+While the test route exists, expect Hubble UI over HTTPS and an HTTPS redirect
+over HTTP. Finish with `sudo ./scripts/hubble-route.py remove` on the server.
+Without a route, DNS still resolves but HTTPS does not serve Hubble. Repeat
+with each application's hostname. API status checks do not prove backend
+availability, certificate trust or end-to-end connectivity.
 
 ## Validation and maintenance
 

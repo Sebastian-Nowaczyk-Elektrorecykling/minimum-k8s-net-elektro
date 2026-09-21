@@ -21,8 +21,8 @@ Cilium includes Hubble UI/Relay, flow metrics, agent/operator/Envoy metrics and
 its bundled dashboard definitions. **No Prometheus, Grafana, Alertmanager,
 Longhorn, GPU Operator or GPU device plugin is installed.** Longhorn and GPU
 preparation is limited to host prerequisites. Cert-manager handles private TLS.
-Hubble UI is available directly over HTTPS without a login during bootstrap;
-its gateway backend can be switched to an SSO proxy later.
+Hubble UI and Relay are enabled inside the cluster. A testing script can
+temporarily expose the UI through the HTTPS gateway without a login.
 
 HTTP/HTTPS routing uses **Gateway API v1**. Cilium Ingress, Hubble Ingress and
 cert-manager ingress-shim are explicitly disabled. See the
@@ -64,8 +64,8 @@ sudo ./scripts/bootstrap-hybrid.sh --interface eno1
 
 This prepares the host, starts an embedded-etcd k3s server that also runs
 workloads, installs the pinned Cilium release, creates the private CA,
-and installs Flux. Flux then adopts Cilium and reconciles DNS, TLS, gateway and
-administration resources from this repository. NVIDIA driver installation may
+and installs Flux. Flux then adopts Cilium and reconciles DNS, TLS, the gateway
+and application resources from this repository. NVIDIA driver installation may
 require a reboot; after `nvidia-smi` works, rerun the command. Use
 `sudo GPU_VENDOR=none ...` on a host where GPU preparation is not wanted.
 
@@ -115,6 +115,7 @@ address change while a node is running requires a controlled k3s restart; see
 | `configure-power.sh` | Apply the node power policy without reinstalling k3s |
 | `check-gateway.sh` | Read-only Gateway API readiness and routing checks |
 | `check-nvidia.sh` | Read-only NVIDIA readiness and kernel/driver diagnostics |
+| `hubble-route.py add / remove` | Create or remove the temporary Hubble HTTPS test route |
 | `remove-node.sh` | Safety checks, drain, cluster removal and remote uninstall |
 
 Dedicated controllers retain kubelet/Cilium. Add two more servers for a
@@ -156,23 +157,23 @@ Cert-manager renews the gateway certificate covering `*.internal`,
 Browsers with independent trust stores may need an import too. Back up the CA
 key securely; never distribute it or commit it.
 
-Open **`https://hubble.admin.internal`** for Hubble's flow view and service map.
-There is **no username/password prompt during bootstrap**. The gateway routes
-directly to Cilium's `hubble-ui` Service, using the same private HTTPS certificate.
+## Temporary Hubble access
 
-When your SSO platform is ready, deploy its authentication proxy from your
-second Flux repository and set these fields in `config/cluster.json` to that
-proxy's Service:
+Flux does not deploy a Hubble HTTPRoute. To test Hubble through the LAN gateway,
+run on a k3s server:
 
-| Setting | Bootstrap default |
-| --- | --- |
-| `hubble_backend_service` | `hubble-ui` |
-| `hubble_backend_namespace` | `kube-system` |
-| `hubble_backend_port` | `80` |
+```bash
+sudo ./scripts/hubble-route.py add
+# Open https://hubble.admin.internal (using the configured domain and trusted CA).
+sudo ./scripts/hubble-route.py remove
+```
 
-Regenerate and commit the configuration to switch the existing route. Hubble
-itself stays in the Cilium release. [docs/hubble-sso.md](docs/hubble-sso.md)
-describes resource ownership, proxy requirements and how to connect SSO.
+The route has **no login** and remains until you remove it. The script manages
+only its `hubble-test` HTTPRoute and ReferenceGrant; Flux does not recreate them.
+It uses `domain` and `api_ip` from `config/cluster.json`. Hubble UI/Relay, DNS,
+TLS and the shared gateway stay available when the test route is removed.
+See [Hubble testing](docs/operations.md#temporary-hubble-route) for inspection
+and local port forwarding.
 
 ## Applications, storage and GPUs
 

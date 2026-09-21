@@ -8,7 +8,7 @@ flowchart TD
   API --> K3s[k3s control plane]
   LAN --> Gateway["192.168.2.153:80/443"]
   Gateway --> Apps[Application routes]
-  Gateway --> Hubble[Hubble UI]
+  Gateway -. Temporary test route .-> Hubble[Hubble UI]
   Hubble --> Relay[Hubble Relay]
 ```
 
@@ -27,7 +27,8 @@ points are unavailable; additional control-plane nodes do not change this.
 
 Host scripts own packages, kernel settings, systemd and k3s configuration.
 Joining nodes discover their LAN IP at every service start; the bootstrap node
-validates its fixed address. Flux owns Kubernetes objects. k3s owns its packaged
+validates its fixed address. Flux owns the declared Kubernetes objects;
+the Hubble testing script owns its optional route and grant. k3s owns its packaged
 CoreDNS and resource metrics-server; Flux supplies the supported
 `coredns-custom` extension. Flannel, kube-proxy, k3s network policy, Traefik,
 ServiceLB and local storage are disabled. Cilium uses the Node PodCIDRs assigned
@@ -41,7 +42,7 @@ exists. Both Flux and CRD manifests reference pinned upstream releases.
 
 `clusters/lan/infrastructure.yaml` defines reconciliation dependencies:
 Gateway API → Cilium → GatewayClass/DNS; Cilium → cert-manager → PKI;
-GatewayClass + PKI → gateway → administration/apps. Cilium has no dependency on
+GatewayClass + PKI → gateway → apps. Cilium has no dependency on
 monitoring CRDs. Hubble UI/Relay, mutual TLS between Hubble agents and Relay,
 metrics and built-in dashboard definitions come from the Cilium chart. No
 collector, dashboard server, alert server or storage operator is deployed.
@@ -64,13 +65,13 @@ coordinated host updates, and Pod/Service CIDR changes require a cluster rebuild
 HTTPS terminates at Envoy. Application, testing, staging and administration
 listeners use hostname and namespace selectors, with certificate coverage for
 each wildcard suffix. Testing and staging share the application namespace
-selector. During bootstrap, the administration route
-forwards directly to the `hubble-ui` Service without authentication. A narrowly
-scoped ReferenceGrant allows the cross-namespace Service reference. Three
-configuration fields select this backend; later they can point to an SSO proxy
-owned by a second repository. The base repository keeps ownership of the route
-and grant, while the second owns the proxy and identity provider, avoiding
-competing reconciliation. See [Hubble SSO](hubble-sso.md).
+selector. Hubble UI has no Flux-managed HTTPRoute. The optional
+`scripts/hubble-route.py` command creates `administration/hubble-test` and
+`kube-system/hubble-test`, a route and narrowly scoped ReferenceGrant for
+`hubble-ui:80`. These objects are outside Flux's inventories, carry a dedicated
+ownership label and remain until explicitly removed. The script rejects
+conflicting routes and resources owned elsewhere. The shared administration
+listener and namespace are available for tools deployed from other repositories.
 
 Hubble gRPC and metrics are not routed onto the LAN;
 Hubble agent host port 4244 is for trusted cluster peers and should be restricted

@@ -62,21 +62,19 @@ def substitute(text, settings):
 
 def validate_hubble_route(docs, c):
     route = next(d for d in docs if d["kind"] == "HTTPRoute" and
-                 d["metadata"] == {"name": "administration", "namespace": "administration"})
+                 d["metadata"]["name"] == "hubble-test")
+    assert route["metadata"]["namespace"] == "administration"
     assert route["spec"]["parentRefs"] == [
         {"name": "internal", "namespace": "gateway-system", "sectionName": "admin-https"}]
     assert route["spec"]["hostnames"] == [f"hubble.admin.{c['domain']}"]
-    # Exactly one configured backend: the SSO route must not retain a direct
-    # Hubble backend that could bypass authentication.
     assert route["spec"]["rules"] == [{"backendRefs": [{
-        "name": c["hubble_backend_service"], "namespace": c["hubble_backend_namespace"],
-        "port": c["hubble_backend_port"]}]}]
+        "name": "hubble-ui", "namespace": "kube-system", "port": 80}]}]
     grant = next(d for d in docs if d["kind"] == "ReferenceGrant" and
-                 d["metadata"]["name"] == "hubble-backend")
-    assert grant["metadata"]["namespace"] == c["hubble_backend_namespace"]
+                 d["metadata"]["name"] == "hubble-test")
+    assert grant["metadata"]["namespace"] == "kube-system"
     assert grant["spec"] == {
         "from": [{"group": "gateway.networking.k8s.io", "kind": "HTTPRoute", "namespace": "administration"}],
-        "to": [{"group": "", "kind": "Service", "name": c["hubble_backend_service"]}]}
+        "to": [{"group": "", "kind": "Service", "name": "hubble-ui"}]}
 
 
 def validate_gateway_domains(docs, c):
@@ -146,23 +144,24 @@ def main():
     example_docs = list(yaml.safe_load_all(example_text))
     validate_gateway_only(all_docs + example_docs)
     root = list(yaml.safe_load_all((cache / "root.yaml").read_text()))
-    for name in ("network", "gateway", "admin", "apps"):
+    for name in ("network", "gateway", "apps"):
         step = next(d for d in root if d["kind"] == "Kustomization" and d["metadata"]["name"] == name)
         assert {h["kind"] for h in step["spec"]["healthCheckExprs"]} == {"GatewayClass", "Gateway", "HTTPRoute"}
     for d in all_docs:
         if d["kind"] == "Secret":
             raise ValueError("Secrets must not be committed")
-    validate_hubble_route(all_docs, c)
-    # Exercise a future proxy in a different namespace and on a different
-    # Service port. Rendering must update both the route and its grant together.
-    sso = dict(c, hubble_backend_service="hubble-sso", hubble_backend_namespace="sso-system",
-               hubble_backend_port=4180)
-    sso_settings = config.outputs(sso)["clusters/lan/cluster-settings.yaml"]["data"]
-    sso_rendered = substitute(run(kustomize, "build", "infrastructure/admin"), sso_settings)
-    (cache / "admin-sso-example.yaml").write_text(sso_rendered)
-    sso_docs = [d for d in yaml.safe_load_all(sso_rendered) if d]
-    validate_hubble_route(sso_docs, sso)
-    print("Validated configured Hubble route and cross-namespace SSO proxy example")
+    # The test route is generated on demand and must stay outside Flux's inventory.
+    test_route_docs = json.loads(run(sys.executable, "scripts/hubble-route.py", "render"))["items"]
+    test_identities = {(d["kind"], d["metadata"]["namespace"], d["metadata"]["name"]) for d in test_route_docs}
+    for d in all_docs:
+        assert (d["kind"], d["metadata"].get("namespace"), d["metadata"]["name"]) not in test_identities
+        if d["kind"] == "HTTPRoute":
+            assert f"hubble.admin.{c['domain']}" not in d["spec"].get("hostnames", []), "Hubble must not have a Flux-managed route"
+            assert not any(b["name"] == "hubble-ui" for r in d["spec"].get("rules", []) for b in r.get("backendRefs", []))
+    (cache / "hubble-test.yaml").write_text(yaml.safe_dump_all(test_route_docs))
+    validate_gateway_only(test_route_docs)
+    validate_hubble_route(test_route_docs, c)
+    print("Validated optional Hubble test route and its exclusion from Flux targets")
     releases = {d["metadata"]["name"]: d for d in all_docs if d["kind"] == "HelmRelease"}
     adoption = releases["cilium"]["spec"]
     assert (adoption["releaseName"], adoption["targetNamespace"], adoption["storageNamespace"]) == ("cilium", "kube-system", "kube-system")
@@ -232,10 +231,10 @@ def main():
                    ("", "node-role.kubernetes.io/control-plane") for t in pod.get("tolerations", [])), \
             f"Cilium component cannot bootstrap on a dedicated controller: {d['metadata']['name']}"
     services = [d for d in cilium_docs if d and d["kind"] == "Service"]
-    if (c["hubble_backend_service"], c["hubble_backend_namespace"]) == ("hubble-ui", "kube-system"):
-        ui = next(d for d in services if d["metadata"]["name"] == "hubble-ui")
-        assert any(p["port"] == c["hubble_backend_port"] for p in ui["spec"]["ports"]), \
-            "Hubble HTTPRoute does not match the Service emitted by the Cilium chart"
+    ui = next(d for d in services if d["metadata"]["name"] == "hubble-ui")
+    assert ui["spec"].get("type", "ClusterIP") == "ClusterIP"
+    assert any(p["port"] == 80 for p in ui["spec"]["ports"]), \
+        "Hubble test route does not match the Service emitted by the Cilium chart"
     workloads = [d for d in cilium_docs if d and d["kind"] in ("Deployment", "DaemonSet")]
     monitors = yaml.safe_load_all((ROOT / "examples/monitoring/cilium-monitors.yaml").read_text())
     for monitor in monitors:
@@ -286,7 +285,7 @@ def main():
     count = 0
     crd_count = 0
     builtins = []
-    for d in all_docs + sso_docs + example_docs + [d for d in cilium_docs if d] + certificate_docs:
+    for d in all_docs + test_route_docs + example_docs + [d for d in cilium_docs if d] + certificate_docs:
         if d["apiVersion"] == "apiextensions.k8s.io/v1" and d["kind"] == "CustomResourceDefinition":
             crd_validator.validate(d)
             crd_count += 1

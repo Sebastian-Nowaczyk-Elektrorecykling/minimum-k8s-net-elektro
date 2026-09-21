@@ -52,7 +52,7 @@ def check(snapshot, api_ip):
             if not matches or not all(current_conditions(route, p.get("conditions", []),
                                                          ["Accepted", "ResolvedRefs"]) for p in matches):
                 errors.append(f"HTTPRoute {name} is not Accepted with ResolvedRefs at its current generation")
-    for required in ("gateway-system/redirect-https", "administration/administration"):
+    for required in ("gateway-system/redirect-https",):
         if required not in found:
             errors.append(f"Missing required HTTPRoute {required}")
     nodes = snapshot["edge"]["items"]

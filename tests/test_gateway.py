@@ -43,7 +43,7 @@ def snapshot():
                         {"name": n, "conditions": conditions("Accepted", "Programmed", "ResolvedRefs")}
                         for n in listeners]}},
         "routes": {"items": [route("redirect-https", "gateway-system", "http"),
-                             route("administration", "administration", "admin-https")]},
+                             route("hubble-test", "administration", "admin-https")]},
         "edge": {"items": [{"status": {"addresses": [{"type": "InternalIP", "address": "192.168.2.153"}]}}]},
     }
 
@@ -51,6 +51,11 @@ def snapshot():
 class GatewayChecksTests(unittest.TestCase):
     def test_current_gateway_and_routes_pass(self):
         self.assertEqual(gateway_check.check(snapshot(), "192.168.2.153"), [])
+
+    def test_hubble_route_is_optional(self):
+        data = snapshot()
+        data["routes"]["items"].pop()
+        self.assertEqual(gateway_check.check(data, "192.168.2.153"), [])
 
     def test_partial_listener_and_stale_routes_fail(self):
         for change in ("listener", "stale", "wrong-parent", "missing-route", "duplicate-edge", "ingress"):
@@ -62,7 +67,7 @@ class GatewayChecksTests(unittest.TestCase):
             elif change == "wrong-parent":
                 data["routes"]["items"][1]["status"]["parents"][0]["parentRef"]["sectionName"] = "apps-https"
             elif change == "missing-route":
-                data["routes"]["items"].pop()
+                data["routes"]["items"].pop(0)
             elif change == "duplicate-edge":
                 data["edge"]["items"] *= 2
             else:

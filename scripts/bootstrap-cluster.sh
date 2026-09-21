@@ -40,7 +40,7 @@ kubectl apply -f "$REPO_ROOT/clusters/lan/flux-system/sync.yaml"
 # are explicit so DHCP's use of this node for DNS cannot form a recursion loop.
 kubectl -n flux-system wait gitrepository/flux-system --for=condition=Ready --timeout=300s
 kubectl -n flux-system wait kustomization/flux-system --for=condition=Ready --timeout=600s
-for component in cilium dns pki gateway admin apps; do
+for component in cilium dns pki gateway apps; do
   kubectl -n flux-system wait "kustomization/$component" --for=condition=Ready --timeout=900s
 done
 kubectl -n kube-system wait helmrelease/cilium --for=condition=Ready --timeout=300s
@@ -48,4 +48,4 @@ kubectl -n kube-system wait helmrelease/cilium --for=condition=Ready --timeout=3
 log 'Flux now owns the manifests and will adopt the existing cilium/kube-system Helm release.'
 log "Check scripts/status.sh, then point LAN DNS clients or the router at $API_IP."
 log 'The CA is saved under /etc/elektro/secrets (root-only). Back it up securely.'
-log 'Hubble UI has no login during bootstrap. See docs/hubble-sso.md for connecting an SSO proxy later.'
+log 'Hubble UI is cluster-internal. Use scripts/hubble-route.py add for temporary LAN testing and remove when finished.'

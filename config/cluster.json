@@ -9,9 +9,6 @@
   "cluster_dns_ip": "10.43.0.10",
   "lan_dns_service_ip": "10.43.0.54",
   "domain": "internal",
-  "hubble_backend_service": "hubble-ui",
-  "hubble_backend_namespace": "kube-system",
-  "hubble_backend_port": 80,
   "upstream_dns": [
     "1.1.1.1",
     "9.9.9.9"

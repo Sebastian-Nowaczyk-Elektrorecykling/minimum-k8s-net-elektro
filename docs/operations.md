@@ -11,8 +11,7 @@ sudo k3s kubectl get pods -A
 sudo k3s kubectl -n kube-system get helmrelease cilium
 sudo k3s kubectl -n gateway-system describe gateway internal
 sudo k3s kubectl -n gateway-system get certificate internal-wildcard
-sudo k3s kubectl -n administration describe httproute administration
-sudo k3s kubectl get referencegrant hubble-backend -n kube-system
+sudo k3s kubectl -n gateway-system describe httproute redirect-https
 sudo k3s kubectl get nodes -l elektro.internal/edge=true -o wide
 sudo k3s kubectl -n lan-system get pods -o wide
 ```
@@ -38,12 +37,13 @@ dig @192.168.2.153 app.internal AAAA
 dig @192.168.2.153 debian.org A +short
 
 curl --cacert ca.crt -I --resolve hubble.admin.internal:443:192.168.2.153 \
-  https://hubble.admin.internal   # expect 200; no login during bootstrap
+  https://hubble.admin.internal   # expect 404 when no Hubble route is installed
 ```
 
 All private A answers should be `192.168.2.153`.
-Private AAAA queries should have no external answer. The app hostname will give
-an HTTP 404 until an HTTPRoute exists. To deploy a smoke-test application:
+Private AAAA queries should have no external answer. App and Hubble hostnames
+give an HTTP 404 over HTTPS until their HTTPRoutes exist. To test Hubble, use
+the [temporary route](#temporary-hubble-route). To deploy a smoke-test application:
 
 ```bash
 cp examples/whoami.yaml apps/whoami.yaml
@@ -54,9 +54,50 @@ Check `https://whoami.internal` from the LAN and `.internal` lookups from an
 application Pod. Reboot the bootstrap host to verify persistent setup, then
 join at least one worker and repeat cross-node traffic tests. The API, DNS and
 gateway all depend on the `.153` node; they do not fail over to DHCP nodes.
-For a configured SSO backend, inspect `hubble-backend` in that backend
-namespace and expect the configured login flow instead of an anonymous 200.
-See [Hubble SSO](hubble-sso.md) for connecting an authentication proxy.
+
+## Temporary Hubble route
+
+Hubble UI and Relay run as Cilium components. Their Services stay inside the
+cluster. To expose the UI through the shared HTTPS gateway for a test, run
+on a k3s server with the cluster's checkout and administrator kubeconfig:
+
+```bash
+sudo ./scripts/hubble-route.py add
+sudo k3s kubectl -n administration describe httproute hubble-test
+sudo k3s kubectl -n kube-system get referencegrant hubble-test
+```
+
+The command uses `KUBECONFIG`, defaulting to `/etc/rancher/k3s/k3s.yaml`, and
+reads `config/cluster.json`. It waits up to 120 seconds for the current route's
+`Accepted` and `ResolvedRefs` conditions; use `--timeout 300` to wait longer.
+`python3 scripts/hubble-route.py render` previews the two manifests without
+contacting Kubernetes. Both resources use the name `hubble-test`, with the
+route in `administration` and its Service permission in `kube-system`.
+
+Open `https://hubble.admin.internal` from the LAN with the private CA trusted
+(substitute your configured domain). The route forwards to `hubble-ui:80`
+without authentication and stays present until explicitly removed. Remove it
+after testing:
+
+```bash
+sudo ./scripts/hubble-route.py remove
+```
+
+Both actions can be repeated. Removal only deletes the script's labeled route
+and grant, and works independently of local configuration or Gateway readiness.
+The script refuses objects owned elsewhere and checks for conflicting routes
+before adding its own. If applying or waiting fails, inspect the reported
+objects, then retry `add` or use `remove` to clean up. Flux leaves these temporary
+objects alone; Hubble deployments, the shared gateway, DNS and TLS are unaffected
+by their removal.
+
+For local access without creating a route, run this on the machine where you
+will open the browser, with an appropriate kubeconfig:
+
+```bash
+kubectl -n kube-system port-forward service/hubble-ui 12000:80
+# Open http://127.0.0.1:12000 while the command is running.
+```
 
 ## LAN DNS runtime requirements
 
@@ -374,7 +415,7 @@ Back up `/var/lib/rancher/k3s/server/token` together with etcd snapshots. The
 token is needed to restore encrypted bootstrap data. Server snapshots are taken
 twice daily and retain 14 local snapshots; local retention is not off-host
 backup. Configure an appropriate S3/backup destination separately. Also preserve
-the CA and any future SSO/workload secrets outside Git.
+the CA and workload secrets outside Git.
 
 CA initialization preserves backups if the API read fails or a certificate/key
 pair is invalid. A partial local backup is an error, not permission to generate

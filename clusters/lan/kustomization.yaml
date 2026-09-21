@@ -9,5 +9,5 @@ patches:
       group: kustomize.toolkit.fluxcd.io
       version: v1
       kind: Kustomization
-      name: (network|gateway|admin|apps)
+      name: (network|gateway|apps)
     path: gateway-health.yaml

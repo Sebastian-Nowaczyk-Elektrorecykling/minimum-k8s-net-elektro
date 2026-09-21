@@ -16,9 +16,6 @@
     "CLUSTER_DNS_IP": "10.43.0.10",
     "LAN_DNS_SERVICE_IP": "10.43.0.54",
     "DOMAIN": "internal",
-    "HUBBLE_BACKEND_SERVICE": "hubble-ui",
-    "HUBBLE_BACKEND_NAMESPACE": "kube-system",
-    "HUBBLE_BACKEND_PORT": "80",
     "OPERATOR_REPLICAS": "1",
     "K3S_VERSION": "v1.36.4+k3s1",
     "CILIUM_VERSION": "1.20.2",
@@ -32,6 +29,6 @@
     "ADMIN_DOMAIN": "admin.internal",
     "TESTING_DOMAIN": "testing.internal",
     "STAGING_DOMAIN": "staging.internal",
-    "CONFIG_REVISION": "6361e426955ebcc4"
+    "CONFIG_REVISION": "d134aea8b4645f79"
   }
 }

@@ -16,8 +16,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config/cluster.json"
 CONFIG_KEYS = set("""cluster_name git_url git_branch lan_cidr api_ip pod_cidr
-service_cidr cluster_dns_ip lan_dns_service_ip domain hubble_backend_service
-hubble_backend_namespace hubble_backend_port upstream_dns cilium_devices
+service_cidr cluster_dns_ip lan_dns_service_ip domain upstream_dns cilium_devices
 operator_replicas k3s_version cilium_version gateway_api_version flux_version
 helm_version cert_manager_version coredns_image nvidia_toolkit_version""".split())
 
@@ -28,7 +27,7 @@ def load(path=CONFIG):
         raise ValueError("Configuration must be a JSON object")
     if set(c) != CONFIG_KEYS:
         raise ValueError(f"Missing settings: {sorted(CONFIG_KEYS - set(c))}; unknown settings: {sorted(set(c) - CONFIG_KEYS)}")
-    for key in CONFIG_KEYS - {"upstream_dns", "cilium_devices", "operator_replicas", "hubble_backend_port"}:
+    for key in CONFIG_KEYS - {"upstream_dns", "cilium_devices", "operator_replicas"}:
         if not isinstance(c[key], str) or not c[key]:
             raise ValueError(f"{key} must be a nonempty string")
     for key in ("upstream_dns", "cilium_devices"):
@@ -70,15 +69,6 @@ def load(path=CONFIG):
         raise ValueError("domain must not overlap Kubernetes' cluster.local DNS zone")
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,30}", c["cluster_name"]):
         raise ValueError("Invalid cluster_name")
-    for key in ("hubble_backend_service", "hubble_backend_namespace"):
-        value = c[key]
-        first = "[a-z]" if key == "hubble_backend_service" else "[a-z0-9]"
-        if not isinstance(value, str) or len(value) > 63 or not re.fullmatch(
-                first + r"(?:[-a-z0-9]*[a-z0-9])?", value):
-            raise ValueError(f"Invalid Kubernetes name for {key}")
-    port = c["hubble_backend_port"]
-    if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
-        raise ValueError("hubble_backend_port must be an integer from 1 to 65535")
     if not c["upstream_dns"]:
         raise ValueError("At least one upstream DNS address is required")
     for value in c["upstream_dns"]:

@@ -11,7 +11,7 @@ repository commands from a clean checkout on an administration machine.
 
 | Item | Purpose when building another cluster |
 | --- | --- |
-| `config/cluster.json` | Addressing, domain, Git URL/branch, Hubble backend and software versions; review for the destination |
+| `config/cluster.json` | Addressing, domain, Git URL/branch and software versions; review for the destination |
 | `apps/`, `infrastructure/`, `clusters/lan/*.yaml` | Desired workloads, shared services and reconciliation dependencies; keep these |
 | `scripts/`, `tests/`, `examples/`, documentation and CI | Keep these with the configuration |
 | `clusters/lan/flux-system/` | Three generated bootstrap files; keep them or delete and regenerate the complete directory |
@@ -36,7 +36,7 @@ Do this before changing a repository/branch that the old cluster watches, or
 before assigning its IP address to a replacement host.
 
 1. Back up data you intend to retain: application/database backups, Longhorn
-   volume backups, workload/SSO Secrets and any Git decryption keys. Store them
+   volume backups, workload Secrets and any Git decryption keys. Store them
    outside the hosts being rebuilt. For disaster recovery, also save an etcd
    snapshot together with `/var/lib/rancher/k3s/server/token` and both
    `/etc/elektro/secrets/ca.crt` and `ca.key` securely. Git alone cannot restore
@@ -175,7 +175,6 @@ for the fields required by your Git transport.
 | `domain`, `upstream_dns` | Match LAN resolver forwarding; upstreams must not loop back through this cluster |
 | Pod/Service CIDRs and DNS Service IPs | Choose before installation; avoid overlapping routed networks and keep Service IPs inside their CIDR |
 | `cilium_devices` | Empty for auto-detection, or interfaces appropriate to the new hardware |
-| Hubble backend | Use `hubble-ui`, `kube-system`, port `80` for direct bootstrap access unless the SSO backend is deployed and ready |
 | Applications and other Git sources | Review external Git URLs, dependencies, namespaces, hostnames, node selectors, storage classes and Secrets |
 | CA and data | Decide what to restore from backup and what to create fresh |
 
@@ -225,9 +224,8 @@ cycle where bootstrap waits for applications that need a manual restore first.
    from a retired cluster do not apply to a fresh bootstrap.
 3. Configure LAN DNS forwarding and client CA trust, then run the
    [first-run acceptance checks](operations.md#first-run-acceptance).
-4. Restore application data and Secrets as planned, reconnect any additional
-   Flux repositories, and connect the [Hubble SSO proxy](hubble-sso.md) once it
-   is ready.
+4. Restore application data and Secrets as planned and reconnect any additional
+   Flux repositories.
 
 A fresh bootstrap creates a private CA unless a complete pair already exists
 in `/etc/elektro/secrets` or in the cluster. If intentionally retaining the CA,
