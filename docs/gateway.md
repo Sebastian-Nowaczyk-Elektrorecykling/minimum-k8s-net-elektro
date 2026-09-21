@@ -18,6 +18,7 @@ Use [the whoami example](../examples/whoami.yaml) as the HTTPRoute pattern:
 | Testing application | Namespace label `elektro.internal/route-scope: applications`; parent listener `testing-https`; hostname such as `app.testing.internal` |
 | Staging application | Namespace label `elektro.internal/route-scope: applications`; parent listener `staging-https`; hostname such as `app.staging.internal` |
 | Administration tool | Namespace label `elektro.internal/route-scope: administration`; parent listener `admin-https`; hostname such as `tool.admin.internal` |
+| Management tool | Namespace label `elektro.internal/route-scope: management`; parent listener `management-https`; hostname such as `openbudget.management.internal` |
 | Gateway parent | `name: internal`, `namespace: gateway-system`, explicit `sectionName` |
 | Service backend | `backendRefs` with the Service name and **Service port**, not container port |
 | Cross-namespace backend | A narrowly scoped ReferenceGrant in the backend namespace |
@@ -25,12 +26,13 @@ Use [the whoami example](../examples/whoami.yaml) as the HTTPRoute pattern:
 | HTTP redirect | Shared `redirect-https` HTTPRoute on port 80 |
 
 Keep hostnames to one label below their chosen suffix: `internal`,
-`admin.internal`, `testing.internal` or `staging.internal`. The gateway
-certificate includes a separate wildcard for each suffix because certificate
+`admin.internal`, `management.internal`, `testing.internal` or `staging.internal`.
+The gateway certificate includes a separate wildcard for each suffix because certificate
 wildcards only cover one label. The generated `DOMAIN`, `ADMIN_DOMAIN`,
-`TESTING_DOMAIN` and `STAGING_DOMAIN` settings all follow `domain` in
-`config/cluster.json`; changing it to `example.test` gives `testing.example.test`
-and `staging.example.test` automatically.
+`MANAGEMENT_DOMAIN`, `TESTING_DOMAIN` and `STAGING_DOMAIN` settings all follow
+`domain` in `config/cluster.json`; changing it to `example.test` gives
+`management.example.test`, `testing.example.test` and `staging.example.test`
+automatically.
 
 For a testing application Service named `my-app` exposing port 80 in a namespace
 labelled `elektro.internal/route-scope: applications`, use this HTTPRoute spec:
@@ -62,7 +64,45 @@ HTTPRoutes to its listeners; a second Gateway on those ports would conflict.
 DNS directs private names to the edge address, but a Service and HTTPRoute
 must exist before an application can answer requests.
 The existing HTTP redirect and LAN forwarding rule for `internal` cover all
-four suffixes. No additional LAN address or router forwarding rule is needed.
+five suffixes. No additional LAN address or router forwarding rule is needed.
+
+## Management tools
+
+Use `*.management.internal` for business tools intended for management users,
+such as a future OpenBudget deployment. The `management` namespace is provided
+with `elektro.internal/route-scope: management`; other tool namespaces can use
+the same label. Only namespaces with this label can attach routes to the
+`management-https` listener. Keep application Deployments, Services and routes
+in the repository that owns the tool.
+
+For example, a Service named `my-tool` exposing port 80 in `management` can use
+this route:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: my-tool
+  namespace: management
+spec:
+  parentRefs:
+    - name: internal
+      namespace: gateway-system
+      sectionName: management-https
+  hostnames: ['my-tool.${MANAGEMENT_DOMAIN}']
+  rules:
+    - backendRefs: [{name: my-tool, port: 80}]
+```
+
+Use the deployed tool's actual Service name and port. A separate Flux repository
+must provide `MANAGEMENT_DOMAIN` itself or use the literal hostname. This
+baseline supplies DNS, TLS, the listener and namespace; tools are deployed
+separately. Authorize management users in the tool or its access
+layer. The DNS suffix and namespace selector do not authenticate users or
+restrict which LAN clients can connect.
+
+See [Gateway route attachment](https://gateway-api.sigs.k8s.io/guides/user-guides/multiple-ns/)
+for namespace selection and ownership of shared gateways.
 
 ## Verify routing
 
@@ -86,6 +126,7 @@ certificate:
 
 ```bash
 dig @192.168.2.153 hubble.admin.internal A +short
+dig @192.168.2.153 openbudget.management.internal A +short
 dig @192.168.2.153 app.testing.internal A +short
 dig @192.168.2.153 app.staging.internal A +short
 curl --cacert ca.crt --resolve hubble.admin.internal:443:192.168.2.153 \

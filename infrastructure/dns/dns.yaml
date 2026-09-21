@@ -25,13 +25,15 @@ data:
     }
   internal.zone: |
     $ORIGIN ${DOMAIN}.
-    @ 30 IN SOA ns.${DOMAIN}. hostmaster.${DOMAIN}. ( 2026091701 60 30 604800 30 )
+    @ 30 IN SOA ns.${DOMAIN}. hostmaster.${DOMAIN}. ( 2026092101 60 30 604800 30 )
     @ 30 IN NS ns.${DOMAIN}.
     @ 30 IN A ${API_IP}
     ns 30 IN A ${API_IP}
     api 30 IN A ${API_IP}
     admin 30 IN A ${API_IP}
     *.admin 30 IN A ${API_IP}
+    management 30 IN A ${API_IP}
+    *.management 30 IN A ${API_IP}
     testing 30 IN A ${API_IP}
     *.testing 30 IN A ${API_IP}
     staging 30 IN A ${API_IP}

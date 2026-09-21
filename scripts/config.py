@@ -140,6 +140,7 @@ def outputs(c):
                 if isinstance(value, (str, int))}
     settings["UPSTREAM_DNS"] = " ".join(c["upstream_dns"])
     settings["ADMIN_DOMAIN"] = "admin." + c["domain"]
+    settings["MANAGEMENT_DOMAIN"] = "management." + c["domain"]
     settings["TESTING_DOMAIN"] = "testing." + c["domain"]
     settings["STAGING_DOMAIN"] = "staging." + c["domain"]
     settings["CONFIG_REVISION"] = hashlib.sha256(json.dumps(c, sort_keys=True).encode()).hexdigest()[:16]

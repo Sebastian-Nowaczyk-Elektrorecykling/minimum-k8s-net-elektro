@@ -82,6 +82,7 @@ def validate_gateway_domains(docs, c):
     assert "addresses" not in gateway["spec"], "Host-network gateway must not request a VIP"
     listeners = {listener["name"]: listener for listener in gateway["spec"]["listeners"]}
     domains = {"apps-https": c["domain"], "admin-https": f"admin.{c['domain']}",
+               "management-https": f"management.{c['domain']}",
                "testing-https": f"testing.{c['domain']}", "staging-https": f"staging.{c['domain']}"}
     certificate = next(d for d in docs if d["kind"] == "Certificate" and
                        d["metadata"]["name"] == "internal-wildcard")
@@ -93,11 +94,11 @@ def validate_gateway_domains(docs, c):
         assert listener["tls"]["mode"] == "Terminate"
         assert listener["tls"]["certificateRefs"] == [{"kind": "Secret", "name": "internal-wildcard-tls"}]
         assert f"*.{domain}" in certificate["spec"]["dnsNames"], f"Missing TLS coverage for {domain}"
-        scope = "administration" if name == "admin-https" else "applications"
+        scope = {"admin-https": "administration", "management-https": "management"}.get(name, "applications")
         assert listener["allowedRoutes"]["namespaces"] == {
             "from": "Selector", "selector": {"matchLabels": {"elektro.internal/route-scope": scope}}}
     # Gateway HTTP hostname wildcards include multiple labels, so the shared
-    # redirect covers the administration, testing and staging subdomains too.
+    # redirect covers the administration, management, testing and staging subdomains too.
     assert listeners["http"]["hostname"] == f"*.{c['domain']}"
     redirect = next(d for d in docs if d["kind"] == "HTTPRoute" and d["metadata"]["name"] == "redirect-https")
     assert redirect["spec"]["hostnames"] == [f"*.{c['domain']}"]
@@ -182,13 +183,15 @@ def main():
     assert not any(d["kind"] in ("CiliumLoadBalancerIPPool", "CiliumL2AnnouncementPolicy") or
                    (d["kind"] == "Service" and d["spec"].get("type") == "LoadBalancer") for d in all_docs)
     validate_gateway_domains(all_docs, c)
+    management = next(d for d in all_docs if d["kind"] == "Namespace" and d["metadata"]["name"] == "management")
+    assert management["metadata"]["labels"]["elektro.internal/route-scope"] == "management"
     renamed = dict(c, domain="example.test")
     renamed_settings = config.outputs(renamed)["clusters/lan/cluster-settings.yaml"]["data"]
     renamed_docs = []
     for path in ("infrastructure/gateway/gateway.yaml", "infrastructure/pki/certificates.yaml"):
         renamed_docs.extend(yaml.safe_load_all(substitute((ROOT / path).read_text(), renamed_settings)))
     validate_gateway_domains(renamed_docs, renamed)
-    print("Validated application, admin, testing and staging HTTPS domains with a configurable base domain")
+    print("Validated application, admin, management, testing and staging HTTPS domains with a configurable base domain")
     charts = [("cilium", "kube-system", "https://helm.cilium.io", c["cilium_version"]),
               ("cert-manager", "cert-manager", "https://charts.jetstack.io", c["cert_manager_version"])]
     chart_dir = os.environ.get("CHART_DIR")

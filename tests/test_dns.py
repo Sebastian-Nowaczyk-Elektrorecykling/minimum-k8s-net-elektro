@@ -79,8 +79,9 @@ class DNSTests(unittest.TestCase):
         self.assertTrue(fields[1] & 0x0400, "Private suffix must be authoritative")
         return fields, result
 
-    def test_application_admin_and_environment_names_over_udp_and_tcp(self):
-        for prefix in ("application", "hubble.admin", "testing", "application.testing",
+    def test_application_admin_management_and_environment_names_over_udp_and_tcp(self):
+        for prefix in ("application", "hubble.admin", "management", "openbudget.management",
+                       "testing", "application.testing",
                        "staging", "application.staging"):
             for tcp in (False, True):
                 with self.subTest(prefix=prefix, tcp=tcp):
@@ -94,7 +95,8 @@ class DNSTests(unittest.TestCase):
         self.assertIn(socket.inet_aton(self.settings["API_IP"]), data)
 
     def test_aaaa_is_empty_and_authoritative(self):
-        for prefix in ("application", "hubble.admin", "testing", "application.testing",
+        for prefix in ("application", "hubble.admin", "management", "openbudget.management",
+                       "testing", "application.testing",
                        "staging", "application.staging"):
             for tcp in (False, True):
                 with self.subTest(prefix=prefix, tcp=tcp):

@@ -29,11 +29,14 @@ AAAA behavior:
 
 ```bash
 dig @192.168.2.153 hubble.admin.internal A +short
+dig @192.168.2.153 openbudget.management.internal A +short
+dig @192.168.2.153 openbudget.management.internal A +tcp +short
 dig @192.168.2.153 app.internal A +tcp +short
 dig @192.168.2.153 app.testing.internal A +short
 dig @192.168.2.153 app.staging.internal A +tcp +short
 dig @192.168.2.153 api.internal A +short
 dig @192.168.2.153 app.internal AAAA
+dig @192.168.2.153 openbudget.management.internal AAAA
 dig @192.168.2.153 debian.org A +short
 
 curl --cacert ca.crt -I --resolve hubble.admin.internal:443:192.168.2.153 \
@@ -41,8 +44,8 @@ curl --cacert ca.crt -I --resolve hubble.admin.internal:443:192.168.2.153 \
 ```
 
 All private A answers should be `192.168.2.153`.
-Private AAAA queries should have no external answer. App and Hubble hostnames
-give an HTTP 404 over HTTPS until their HTTPRoutes exist. To test Hubble, use
+Private AAAA queries should have no external answer. Application, management
+and Hubble hostnames give an HTTP 404 over HTTPS until their HTTPRoutes exist. To test Hubble, use
 the [temporary route](#temporary-hubble-route). To deploy a smoke-test application:
 
 ```bash

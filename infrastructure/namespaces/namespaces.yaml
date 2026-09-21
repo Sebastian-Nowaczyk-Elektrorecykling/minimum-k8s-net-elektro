@@ -23,6 +23,13 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
+  name: management
+  labels:
+    elektro.internal/route-scope: management
+---
+apiVersion: v1
+kind: Namespace
+metadata:
   name: apps
   labels:
     elektro.internal/route-scope: applications

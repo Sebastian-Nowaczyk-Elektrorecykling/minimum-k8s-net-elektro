@@ -30,7 +30,7 @@ def route(name, namespace, section):
 
 
 def snapshot():
-    listeners = ("http", "apps-https", "admin-https", "testing-https", "staging-https")
+    listeners = ("http", "apps-https", "admin-https", "management-https", "testing-https", "staging-https")
     return {
         "ingress": {"items": []},
         "cilium": {"data": {"enable-gateway-api": "true", "gateway-api-hostnetwork-enabled": "true",

@@ -36,6 +36,18 @@ spec:
           from: Selector
           selector:
             matchLabels: {elektro.internal/route-scope: administration}
+    - name: management-https
+      hostname: '*.${MANAGEMENT_DOMAIN}'
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs: [{kind: Secret, name: internal-wildcard-tls}]
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels: {elektro.internal/route-scope: management}
     - name: testing-https
       hostname: '*.${TESTING_DOMAIN}'
       port: 443

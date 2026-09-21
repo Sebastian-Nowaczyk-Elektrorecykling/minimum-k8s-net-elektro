@@ -13,6 +13,7 @@ controllers, workers and hybrids can use DHCP.
 | HTTP / HTTPS gateway | `192.168.2.153:80` / `:443` |
 | Application names | `*.internal` → `192.168.2.153` |
 | Administration names | `*.admin.internal` → `192.168.2.153` |
+| Management tool names | `*.management.internal` → `192.168.2.153` |
 | Testing application names | `*.testing.internal` → `192.168.2.153` |
 | Staging application names | `*.staging.internal` → `192.168.2.153` |
 | Pod / Service networks | `10.42.0.0/16` / `10.43.0.0/16` |
@@ -139,7 +140,7 @@ Avoid an upstream resolver that forwards all queries back to this cluster.
 
 Cluster CoreDNS forwards `.internal` to the dedicated DNS Service; Kubernetes
 `cluster.local` keeps its usual meaning. All private A records, including
-`api.internal`, `ns.internal` and all four wildcard families, answer `.153`. IPv6
+`api.internal`, `ns.internal` and all five wildcard families, answer `.153`. IPv6
 queries for these IPv4-only names receive authoritative empty answers. DNS
 alone does not deploy an application; each application also needs an HTTPRoute.
 The gateway handles HTTP/HTTPS, not LAN default routing or NAT.
@@ -153,7 +154,8 @@ sudo update-ca-certificates
 ```
 
 Cert-manager renews the gateway certificate covering `*.internal`,
-`*.admin.internal`, `*.testing.internal` and `*.staging.internal`.
+`*.admin.internal`, `*.management.internal`, `*.testing.internal` and
+`*.staging.internal`.
 Browsers with independent trust stores may need an import too. Back up the CA
 key securely; never distribute it or commit it.
 
@@ -179,7 +181,12 @@ and local port forwarding.
 
 Add application manifests to `apps/` and `apps/kustomization.yaml`. Application
 namespaces carry `elektro.internal/route-scope: applications`; administration
-namespaces use `administration`. [examples/whoami.yaml](examples/whoami.yaml)
+namespaces use `administration`, and management tool namespaces use `management`.
+The supplied `management` namespace is ready for future tools such as OpenBudget
+at `openbudget.management.internal`, using `sectionName: management-https`.
+Tools must authorize access for management users;
+DNS names and namespace labels control routing, not user login or permissions.
+[examples/whoami.yaml](examples/whoami.yaml)
 provides an opt-in application and HTTPRoute at `https://whoami.internal`.
 Testing and staging routes use the same application namespace label, with
 `sectionName: testing-https` or `staging-https` and a hostname such as

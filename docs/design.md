@@ -62,10 +62,14 @@ Flux substitutes settings into the other manifests.
 settings are not reconciled by Flux. Changing IPs or server flags requires
 coordinated host updates, and Pod/Service CIDR changes require a cluster rebuild.
 
-HTTPS terminates at Envoy. Application, testing, staging and administration
-listeners use hostname and namespace selectors, with certificate coverage for
+HTTPS terminates at Envoy. Application, testing, staging, administration and
+management listeners use hostname and namespace selectors, with certificate coverage for
 each wildcard suffix. Testing and staging share the application namespace
-selector. Hubble UI has no Flux-managed HTTPRoute. The optional
+selector. Management tools use the `management-https` listener, restricted to
+namespaces labeled `elektro.internal/route-scope: management`; the supplied
+`management` namespace has that label. Tools own their user authorization;
+namespace selectors determine route attachment. Hubble UI has no Flux-managed
+HTTPRoute. The optional
 `scripts/hubble-route.py` command creates `administration/hubble-test` and
 `kube-system/hubble-test`, a route and narrowly scoped ReferenceGrant for
 `hubble-ui:80`. These objects are outside Flux's inventories, carry a dedicated
